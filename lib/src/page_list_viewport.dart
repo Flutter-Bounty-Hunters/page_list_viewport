@@ -143,6 +143,7 @@ class PageListViewportController with ChangeNotifier {
   /// The largest that the viewport content is allowed to be.
   double get maximumScale => _maximumScale;
   double _maximumScale;
+
   set maximumScale(double newMaximumScale) {
     if (newMaximumScale == _maximumScale) {
       return;
@@ -159,6 +160,7 @@ class PageListViewportController with ChangeNotifier {
   /// The smallest that the viewport content is allowed to be.
   double get minimumScale => _minimumScale;
   double _minimumScale;
+
   set minimumScale(double newMinimumScale) {
     if (newMinimumScale == _minimumScale) {
       return;
@@ -400,12 +402,13 @@ class RenderPageListViewport extends RenderBox {
   @override
   void dispose() {
     _controller?.removeListener(_onPanScrollOrZoom);
+    _element = null;
     super.dispose();
   }
 
-  final PageListViewportElement _element;
-
+  PageListViewportElement? _element;
   int _pageCount;
+
   set pageCount(int newCount) {
     if (newCount == _pageCount) {
       return;
@@ -416,6 +419,7 @@ class RenderPageListViewport extends RenderBox {
   }
 
   Size _naturalPageSize;
+
   set naturalPageSize(Size newPageSize) {
     if (newPageSize == _naturalPageSize) {
       return;
@@ -432,6 +436,7 @@ class RenderPageListViewport extends RenderBox {
   Size get _scaledPageSize => _naturalPageSize * _contentScale;
 
   int _pageLayoutCacheCount;
+
   set pageLayoutCacheCount(int newCount) {
     assert(newCount >= 0);
     if (newCount == _pageLayoutCacheCount) {
@@ -450,6 +455,7 @@ class RenderPageListViewport extends RenderBox {
   }
 
   int _pagePaintCacheCount;
+
   set pagePaintCacheCount(int newCount) {
     assert(newCount >= 0);
     if (newCount == _pagePaintCacheCount) {
@@ -468,6 +474,7 @@ class RenderPageListViewport extends RenderBox {
   }
 
   PageListViewportController? _controller;
+
   set controller(PageListViewportController newController) {
     if (_controller == newController) {
       return;
@@ -490,6 +497,15 @@ class RenderPageListViewport extends RenderBox {
   // so that we can force the controller to scale exactly to the
   // width of the viewport when the controller is first attached.
   bool _isFirstLayoutForController = true;
+
+  @override
+  bool get alwaysNeedsCompositing => true;
+
+  @override
+  ClipRectLayer? get layer => super.layer as ClipRectLayer?;
+
+  @override
+  set layer(ContainerLayer? newLayer) => super.layer = newLayer as ClipRectLayer?;
 
   @override
   void attach(PipelineOwner owner) {
@@ -527,7 +543,7 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void visitChildren(RenderObjectVisitor visitor) {
-    final children = _element._childElements.values.toList();
+    final children = _element!._childElements.values.toList();
     for (final child in children) {
       visitor(child!.renderObject!);
     }
@@ -591,7 +607,7 @@ class RenderPageListViewport extends RenderBox {
         // We call invokeLayoutCallback() because that's the only way we're
         // allowed to adopt children during layout.
         invokeLayoutCallback((constraints) {
-          _element.createPage(pageIndex);
+          _element!.createPage(pageIndex);
         });
       }
     });
@@ -627,52 +643,75 @@ class RenderPageListViewport extends RenderBox {
     final firstPageIndexToLayout = max(_findFirstVisiblePageIndex()! - _pageLayoutCacheCount, 0);
     final lastPageIndexToLayout = min(_findLastVisiblePageIndex()! + _pageLayoutCacheCount, _pageCount - 1);
     for (int pageIndex = firstPageIndexToLayout; pageIndex <= lastPageIndexToLayout; pageIndex += 1) {
-      visitor(pageIndex, _element._childElements[pageIndex]);
+      visitor(pageIndex, _element!._childElements[pageIndex]);
     }
   }
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    final childElements = _element._childElements;
+    final childElements = _element!._childElements;
     final firstPageToPaintIndex = max(_findFirstVisiblePageIndex()! - _pagePaintCacheCount, 0);
     final lastPageToPaintIndex = min(_findLastVisiblePageIndex()! + _pagePaintCacheCount, _pageCount - 1);
 
     PageListViewportLogs.pagesList.finest("Painting children at scale: $_contentScale");
 
-    context.pushClipRect(true, offset, Offset.zero & size, (context, offset) {
-      // Paint all the pages that are visible or cached.
-      for (int pageIndex = firstPageToPaintIndex; pageIndex <= lastPageToPaintIndex; pageIndex += 1) {
-        Timeline.startSync("Paint page $pageIndex");
-        Timeline.startSync("Vars");
-        final childElement = childElements[pageIndex]!;
-        final childRenderBox = childElement.renderObject! as RenderBox;
-        final transform = Matrix4.identity();
-        Timeline.finishSync();
-        Timeline.startSync("Paint transform");
-        applyPaintTransform(childRenderBox, transform);
-        Timeline.finishSync();
+    layer = context.pushClipRect(
+      needsCompositing,
+      offset,
+      Offset.zero & size,
+      oldLayer: layer,
+      (context, offset) {
+        // Paint all the pages that are visible or cached.
+        for (int pageIndex = firstPageToPaintIndex; pageIndex <= lastPageToPaintIndex; pageIndex += 1) {
+          if (debugProfilePaintsEnabled) {
+            Timeline.startSync("Paint page $pageIndex");
+            Timeline.startSync("Vars");
+          }
 
-        Timeline.startSync("Local to global");
-        final pageOriginVec = transform.transform3(Vector3(0, 0, 0));
-        // PdfLogs.pagesList.finest("Painting page index: $pageIndex");
-        // PdfLogs.pagesList.finest(" - child element: $childElement");
-        // PdfLogs.pagesList.finest(" - scaled page size: $_scaledPageSize");
-        // PdfLogs.pagesList.finest(" - page origin: $pageOriginVec");
-        // PdfLogs.pagesList.finest(" - scaled origin: ${pageOriginVec * _contentScale}");
-        // PdfLogs.pagesList.finest("Painting child render object: $childRenderBox");
-        Timeline.finishSync();
+          final childElement = childElements[pageIndex]!;
+          final childRenderBox = childElement.renderObject! as RenderBox;
+          final transform = Matrix4.identity();
 
-        context.pushTransform(
-          true, // Needs compositing
-          offset,
-          transform,
-          // Calling context.paintChild() seems to be necessary. Without it, it seems that our children
-          // might need to paint and yet we don't paint them. Not sure why.
-          (context, offset) => context.paintChild(childRenderBox, offset),
-        );
-        Timeline.finishSync();
-      }
-    });
+          if (debugProfilePaintsEnabled) {
+            Timeline.finishSync();
+            Timeline.startSync("Paint transform");
+          }
+
+          applyPaintTransform(childRenderBox, transform);
+
+          if (debugProfilePaintsEnabled) {
+            Timeline.finishSync();
+            Timeline.startSync("Local to global");
+          }
+
+          final pageOriginVec = transform.transform3(Vector3(0, 0, 0));
+          // PdfLogs.pagesList.finest("Painting page index: $pageIndex");
+          // PdfLogs.pagesList.finest(" - child element: $childElement");
+          // PdfLogs.pagesList.finest(" - scaled page size: $_scaledPageSize");
+          // PdfLogs.pagesList.finest(" - page origin: $pageOriginVec");
+          // PdfLogs.pagesList.finest(" - scaled origin: ${pageOriginVec * _contentScale}");
+          // PdfLogs.pagesList.finest("Painting child render object: $childRenderBox");
+          if (debugProfilePaintsEnabled) {
+            Timeline.finishSync();
+          }
+
+          final parentData = childRenderBox.parentData as _PageParentData;
+          parentData.transformLayerHandle.layer = context.pushTransform(
+            needsCompositing,
+            offset,
+            transform,
+            oldLayer: parentData.transformLayerHandle.layer,
+            // Calling context.paintChild() seems to be necessary. Without it, it seems that our children
+            // might need to paint and yet we don't paint them. Not sure why.
+            (context, offset) => context.paintChild(childRenderBox, offset),
+          );
+
+          if (debugProfilePaintsEnabled) {
+            Timeline.finishSync();
+          }
+        }
+      },
+    );
     PageListViewportLogs.pagesList.finest("Done with viewport paint");
   }
 
@@ -809,6 +848,14 @@ class _PageParentData extends ContainerBoxParentData<RenderBox> with ContainerPa
   });
 
   int pageIndex;
+
+  final transformLayerHandle = LayerHandle<TransformLayer>();
+
+  @override
+  void detach() {
+    transformLayerHandle.layer = null;
+    super.detach();
+  }
 }
 
 /// Controls a [PageListViewportController] with scale gestures to pan and zoom the
