@@ -606,6 +606,7 @@ class RenderPageListViewport extends RenderBox {
       final child = childElement.renderObject! as RenderBox;
       final pageParentData = child.parentData as ViewportPageParentData;
       pageParentData
+        ..viewportSize = size
         ..pageIndex = pageIndex
         ..offset = _controller!.origin + (Offset(0, pageSize.height) * pageIndex.toDouble());
       PageListViewportLogs.pagesList.finest("Laying out child (at $pageIndex): $child");
@@ -865,6 +866,7 @@ class ViewportPageParentData extends ContainerBoxParentData<RenderBox> with Cont
     required this.pageIndex,
   });
 
+  late Size viewportSize;
   int pageIndex;
 
   final transformLayerHandle = LayerHandle<TransformLayer>();
