@@ -36,6 +36,7 @@ class PageListViewport extends RenderObjectWidget {
     this.pageLayoutCacheCount = 0,
     this.pagePaintCacheCount = 0,
     required this.builder,
+    this.rebuildOnOrientationChange = false,
   }) : assert(pageLayoutCacheCount >= pagePaintCacheCount);
 
   /// Controller that pans and zooms the page content.
@@ -58,6 +59,17 @@ class PageListViewport extends RenderObjectWidget {
   /// [PageBuilder], which lazily builds the widgets for each page in
   /// this viewport.
   final PageBuilder builder;
+
+  /// Whether the pages in this viewport should rebuild every time the orientation
+  /// changes.
+  ///
+  /// Orientation changes include panning (horizontal and vertical movement), and
+  /// zooming (scale up/down). Orientation changes happen rapidly. When rebuilding
+  /// on orientation change, the visible and cached pages will rebuild at 60 fps
+  /// during the duration of the orientation change. You should only rebuild during
+  /// orientation change if your page widgets alter their layout or painting based
+  /// on relative position or scale.
+  final bool rebuildOnOrientationChange;
 
   @override
   RenderObjectElement createElement() {
@@ -536,8 +548,8 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void setupParentData(RenderObject child) {
-    if (child.parentData is! _PageParentData) {
-      child.parentData = _PageParentData(pageIndex: -1);
+    if (child.parentData is! ViewportPageParentData) {
+      child.parentData = ViewportPageParentData(pageIndex: -1);
     }
   }
 
@@ -581,15 +593,23 @@ class RenderPageListViewport extends RenderBox {
     // TODO: optimization - deactivate all elements no longer in cache range
     _buildVisibleAndCachedChildren();
 
+    final pageSize = Size(
+      calculatePageWidth(_controller!._scale),
+      calculatePageHeight(_controller!._scale),
+    );
+
     _visitLayoutChildren((pageIndex, childElement) {
       if (childElement == null) {
         return;
       }
 
       final child = childElement.renderObject! as RenderBox;
-      (child.parentData as _PageParentData).pageIndex = pageIndex;
+      final pageParentData = child.parentData as ViewportPageParentData;
+      pageParentData
+        ..pageIndex = pageIndex
+        ..offset = _controller!.origin + (Offset(0, pageSize.height) * pageIndex.toDouble());
       PageListViewportLogs.pagesList.finest("Laying out child (at $pageIndex): $child");
-      child.layout(BoxConstraints.tight(_naturalPageSize), parentUsesSize: true);
+      child.layout(BoxConstraints.tight(pageSize), parentUsesSize: true);
       PageListViewportLogs.pagesList.finest(" - child size: ${child.size}");
     });
   }
@@ -685,17 +705,17 @@ class RenderPageListViewport extends RenderBox {
           }
 
           final pageOriginVec = transform.transform3(Vector3(0, 0, 0));
-          // PdfLogs.pagesList.finest("Painting page index: $pageIndex");
-          // PdfLogs.pagesList.finest(" - child element: $childElement");
-          // PdfLogs.pagesList.finest(" - scaled page size: $_scaledPageSize");
-          // PdfLogs.pagesList.finest(" - page origin: $pageOriginVec");
-          // PdfLogs.pagesList.finest(" - scaled origin: ${pageOriginVec * _contentScale}");
-          // PdfLogs.pagesList.finest("Painting child render object: $childRenderBox");
+          // PageListViewportLogs.pagesList.finer("Painting page index: $pageIndex");
+          // PageListViewportLogs.pagesList.finer(" - child element: $childElement");
+          // PageListViewportLogs.pagesList.finer(" - scaled page size: $_scaledPageSize");
+          // PageListViewportLogs.pagesList.finer(" - page origin: $pageOriginVec");
+          // PageListViewportLogs.pagesList.finer(" - scaled origin: ${pageOriginVec * _contentScale}");
+          // PageListViewportLogs.pagesList.finer("Painting child render object: $childRenderBox");
           if (debugProfilePaintsEnabled) {
             Timeline.finishSync();
           }
 
-          final parentData = childRenderBox.parentData as _PageParentData;
+          final parentData = childRenderBox.parentData as ViewportPageParentData;
           parentData.transformLayerHandle.layer = context.pushTransform(
             needsCompositing,
             offset,
@@ -720,14 +740,12 @@ class RenderPageListViewport extends RenderBox {
   // the given [transform].
   @override
   void applyPaintTransform(RenderObject child, Matrix4 transform) {
-    final pageIndex = (child.parentData as _PageParentData).pageIndex;
+    final pageIndex = (child.parentData as ViewportPageParentData).pageIndex;
     final pageOrigin = Offset(
       _controller!.origin.dx,
       _controller!.origin.dy + (_scaledPageSize.height * pageIndex),
     );
-    transform
-      ..translate(pageOrigin.dx, pageOrigin.dy)
-      ..scale(_contentScale);
+    transform.translate(pageOrigin.dx, pageOrigin.dy);
   }
 
   int? _findFirstVisiblePageIndex() {
@@ -795,7 +813,7 @@ class PageListViewportElement extends RenderObjectElement {
 
     for (final childEntry in _childElements.entries) {
       final pageIndex = childEntry.key;
-      final pageWidget = (widget as PageListViewport).builder(this, pageIndex);
+      final pageWidget = pageListViewport.builder(this, pageIndex);
 
       _childElements[pageIndex] = updateChild(
         _childElements[pageIndex],
@@ -842,8 +860,8 @@ class PageListViewportElement extends RenderObjectElement {
   }
 }
 
-class _PageParentData extends ContainerBoxParentData<RenderBox> with ContainerParentDataMixin<RenderBox> {
-  _PageParentData({
+class ViewportPageParentData extends ContainerBoxParentData<RenderBox> with ContainerParentDataMixin<RenderBox> {
+  ViewportPageParentData({
     required this.pageIndex,
   });
 
