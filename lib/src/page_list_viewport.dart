@@ -544,6 +544,19 @@ class RenderPageListViewport extends RenderBox {
 
   void _onPanScrollOrZoom() {
     markNeedsLayout();
+
+    // When the viewport only translates (no scale), the children won't have their performLayout()
+    // function called because their constraints didn't change, and no one marked them dirty.
+    //
+    // But, child pages that care about the viewport translation, such as pages that cull their
+    // content, need to re-run layout, even when their size doesn't change.
+    //
+    // For now, we force all of our children to re-run layout whenever we pan.
+    // FIXME: find another way to trigger relevant child page relayout, or at least add a way to
+    //        opt-in to this behavior, instead of forcing relayout on all pages of all types.
+    visitChildren((child) {
+      child.markNeedsLayout();
+    });
   }
 
   @override
