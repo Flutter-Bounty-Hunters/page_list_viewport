@@ -112,6 +112,7 @@ class PageListViewportController with ChangeNotifier {
     double minimumScale = 0.1,
     double maximumScale = double.infinity,
   })  : _origin = origin,
+        _previousOrigin = origin,
         _scale = scale,
         _minimumScale = minimumScale,
         _maximumScale = maximumScale {
@@ -134,6 +135,7 @@ class PageListViewportController with ChangeNotifier {
   Offset get origin => _origin;
 
   Offset _origin;
+  Offset _previousOrigin; // used to calculate velocity
 
   set origin(Offset newOrigin) {
     if (newOrigin == _origin) {
@@ -147,6 +149,10 @@ class PageListViewportController with ChangeNotifier {
     _origin = newOrigin;
     notifyListeners();
   }
+
+  Offset get velocity => _velocity;
+
+  Offset _velocity = Offset.zero;
 
   /// The scale of the content in the viewport.
   double get scale => _scale;
@@ -320,9 +326,27 @@ class PageListViewportController with ChangeNotifier {
     final destinationOffset =
         _constrainOriginToViewportBounds(Offset(0, -contentAboveDesiredPage) + desiredPageTopLeftInViewport);
 
+    _previousOrigin = _origin;
     _offsetAnimation = Tween<Offset>(begin: _origin, end: destinationOffset).animate(
       CurvedAnimation(parent: _animationController, curve: curve),
-    );
+    )
+      ..addListener(() {
+        _velocity = _offsetAnimation!.value - _previousOrigin;
+        _previousOrigin = _offsetAnimation!.value;
+      })
+      ..addStatusListener((status) {
+        switch (status) {
+          case AnimationStatus.dismissed:
+          case AnimationStatus.completed:
+            _velocity = Offset.zero;
+            break;
+          case AnimationStatus.forward:
+          case AnimationStatus.reverse:
+            // Don't care.
+            break;
+        }
+      });
+
     _scaleAnimation = Tween<double>(begin: scale, end: desiredZoomLevel).animate(
       CurvedAnimation(parent: _animationController, curve: curve),
     );
