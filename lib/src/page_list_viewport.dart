@@ -114,15 +114,21 @@ class PageListViewportController with ChangeNotifier {
   })  : _origin = origin,
         _previousOrigin = origin,
         _scale = scale,
+        _previousScale = scale,
+        _scaleVelocity = 0.0,
+        _scaleVelocityStopwatch = Stopwatch(),
         _minimumScale = minimumScale,
         _maximumScale = maximumScale {
     _animationController = AnimationController(vsync: vsync) //
       ..addListener(_onOrientationAnimationChange);
+
+    _scaleVelocityStopwatch.start();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _scaleVelocityStopwatch.stop();
     super.dispose();
   }
 
@@ -157,6 +163,11 @@ class PageListViewportController with ChangeNotifier {
   /// The scale of the content in the viewport.
   double get scale => _scale;
   double _scale;
+  double _previousScale;
+
+  double get scaleVelocity => _scaleVelocity;
+  double _scaleVelocity;
+  final Stopwatch _scaleVelocityStopwatch;
 
   /// The largest that the viewport content is allowed to be.
   double get maximumScale => _maximumScale;
@@ -394,7 +405,10 @@ class PageListViewportController with ChangeNotifier {
 
     // Update our scale.
     PageListViewportLogs.pagesListController.fine("Setting scale to $newScale");
+    _previousScale = _scale;
     _scale = newScale;
+    _scaleVelocity = (_scale - _previousScale) / (_scaleVelocityStopwatch.elapsedMilliseconds / 1000);
+    _scaleVelocityStopwatch.reset();
 
     notifyListeners();
   }
