@@ -641,8 +641,7 @@ class RenderPageListViewport extends RenderBox {
       _isFirstLayoutForController = false;
     }
 
-    // TODO: optimization - deactivate all elements no longer in cache range
-    _buildVisibleAndCachedChildren();
+    _createAndCullVisibleAndCachedPages();
 
     final pageSize = Size(
       calculatePageWidth(_controller!._scale),
@@ -673,15 +672,21 @@ class RenderPageListViewport extends RenderBox {
   // This method finds any relevant pages that have yet to be built,
   // and then builds those pages, and adds their new `RenderObject`s
   // as children.
-  void _buildVisibleAndCachedChildren() {
-    _visitLayoutChildren((pageIndex, childElement) {
-      if (childElement == null) {
-        // We call invokeLayoutCallback() because that's the only way we're
-        // allowed to adopt children during layout.
-        invokeLayoutCallback((constraints) {
+  void _createAndCullVisibleAndCachedPages() {
+    invokeLayoutCallback((constraints) {
+      // Create new pages in visual and cache range.
+      _visitLayoutChildren((pageIndex, childElement) {
+        if (childElement == null) {
+          // We call invokeLayoutCallback() because that's the only way we're
+          // allowed to adopt children during layout.
           _element!.createPage(pageIndex);
-        });
-      }
+        }
+      });
+
+      // Remove pages outside of cache range.
+      final firstPageIndex = _findFirstCachedPageIndex();
+      final lastPageIndex = _findLastCachedPageIndex();
+      _element!.removePagesOutsideRange(firstPageIndex, lastPageIndex);
     });
   }
 
@@ -712,8 +717,8 @@ class RenderPageListViewport extends RenderBox {
   }
 
   void _visitLayoutChildren(Function(int pageIndex, Element? childElement) visitor) {
-    final firstPageIndexToLayout = max(_findFirstVisiblePageIndex()! - _pageLayoutCacheCount, 0);
-    final lastPageIndexToLayout = min(_findLastVisiblePageIndex()! + _pageLayoutCacheCount, _pageCount - 1);
+    final firstPageIndexToLayout = _findFirstCachedPageIndex();
+    final lastPageIndexToLayout = _findLastCachedPageIndex();
     for (int pageIndex = firstPageIndexToLayout; pageIndex <= lastPageIndexToLayout; pageIndex += 1) {
       visitor(pageIndex, _element!._childElements[pageIndex]);
     }
@@ -722,8 +727,8 @@ class RenderPageListViewport extends RenderBox {
   @override
   void paint(PaintingContext context, Offset offset) {
     final childElements = _element!._childElements;
-    final firstPageToPaintIndex = max(_findFirstVisiblePageIndex()! - _pagePaintCacheCount, 0);
-    final lastPageToPaintIndex = min(_findLastVisiblePageIndex()! + _pagePaintCacheCount, _pageCount - 1);
+    final firstPageToPaintIndex = _findFirstPaintedPageIndex();
+    final lastPageToPaintIndex = _findLastPaintedPageIndex();
 
     PageListViewportLogs.pagesList.finest("Painting children at scale: $_contentScale");
 
@@ -800,12 +805,28 @@ class RenderPageListViewport extends RenderBox {
     transform.translate(pageOrigin.dx, pageOrigin.dy);
   }
 
-  int? _findFirstVisiblePageIndex() {
+  int _findFirstVisiblePageIndex() {
     return _controller!.origin.dy.abs() ~/ _scaledPageSize.height;
   }
 
-  int? _findLastVisiblePageIndex() {
+  int _findLastVisiblePageIndex() {
     return (_controller!.origin.dy.abs() + size.height) ~/ _scaledPageSize.height;
+  }
+
+  int _findFirstPaintedPageIndex() {
+    return max(_findFirstVisiblePageIndex() - _pagePaintCacheCount, 0);
+  }
+
+  int _findLastPaintedPageIndex() {
+    return min(_findLastVisiblePageIndex() + _pagePaintCacheCount, _pageCount - 1);
+  }
+
+  int _findFirstCachedPageIndex() {
+    return max(_findFirstVisiblePageIndex() - _pageLayoutCacheCount, 0);
+  }
+
+  int _findLastCachedPageIndex() {
+    return min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
   }
 }
 
@@ -891,6 +912,21 @@ class PageListViewportElement extends RenderObjectElement {
         _childElements.remove(pageIndex);
       }
     });
+  }
+
+  void removePagesOutsideRange(int firstPageIndex, int lastPageIndex) {
+    assert(firstPageIndex <= lastPageIndex);
+
+    final pageIndices = _childElements.keys.toList(growable: false);
+    for (final pageIndex in pageIndices) {
+      if (pageIndex >= firstPageIndex && pageIndex <= lastPageIndex) {
+        continue;
+      }
+
+      // Remove this page because it isn't in the desired range.
+      deactivateChild(_childElements[pageIndex]!);
+      _childElements.remove(pageIndex);
+    }
   }
 
   @override
