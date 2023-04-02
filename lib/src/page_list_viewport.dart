@@ -105,6 +105,25 @@ class PageListViewport extends RenderObjectWidget {
 typedef PageBuilder = Widget Function(BuildContext context, int pageIndex);
 
 class PageListViewportController with ChangeNotifier {
+  PageListViewportController.startAtPage({
+    required TickerProvider vsync,
+    required int pageIndex,
+    double scale = 1.0,
+    double minimumScale = 0.1,
+    double maximumScale = double.infinity,
+  })  : assert(pageIndex >= 0, "The initial page index must be >= 0"),
+        _initialPageIndex = pageIndex,
+        _origin = Offset.zero,
+        _previousOrigin = Offset.zero,
+        _scale = scale,
+        _previousScale = scale,
+        _scaleVelocity = 0.0,
+        _scaleVelocityStopwatch = Stopwatch(),
+        _minimumScale = minimumScale,
+        _maximumScale = maximumScale {
+    _initController(vsync);
+  }
+
   PageListViewportController({
     required TickerProvider vsync,
     Offset origin = Offset.zero,
@@ -119,6 +138,10 @@ class PageListViewportController with ChangeNotifier {
         _scaleVelocityStopwatch = Stopwatch(),
         _minimumScale = minimumScale,
         _maximumScale = maximumScale {
+    _initController(vsync);
+  }
+
+  void _initController(TickerProvider vsync) {
     _animationController = AnimationController(vsync: vsync) //
       ..addListener(_onOrientationAnimationChange);
 
@@ -135,6 +158,15 @@ class PageListViewportController with ChangeNotifier {
   late final AnimationController _animationController;
   Animation? _offsetAnimation;
   Animation? _scaleAnimation;
+
+  /// The index of the page that this controller will jump to, when attached to its first
+  /// viewport.
+  ///
+  /// This value is cleared after it's applied. This controller won't jump to this page,
+  /// again.
+  // TODO: should we have a way to set this so that the controller can be attached to new
+  //       viewports?
+  int? _initialPageIndex;
 
   /// The (x,y) offset of the top-left corner of the first page in
   /// the page list, measured in un-scaled pixels.
@@ -224,6 +256,14 @@ class PageListViewportController with ChangeNotifier {
 
   Size? get viewportSize => _viewport?.size;
 
+  void _onViewportLayout() {
+    if (_initialPageIndex != null) {
+      // Jump to the desired page on viewport attachment.
+      _origin = _getPageOffset(_initialPageIndex!);
+      _initialPageIndex = null;
+    }
+  }
+
   /// Immediately changes the viewport offset so that the page at the given [pageIndex] is positioned as close
   /// as possible to the center of the viewport.
   ///
@@ -238,15 +278,19 @@ class PageListViewportController with ChangeNotifier {
     // Stop any on-going orientation animation so that we can jump to the desired page.
     _animationController.stop();
 
+    _origin = _getPageOffset(pageIndex, zoomLevel);
+
+    notifyListeners();
+  }
+
+  Offset _getPageOffset(int pageIndex, [double? zoomLevel]) {
     final desiredZoomLevel = zoomLevel ?? scale;
     final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
     final desiredPageTopLeftInViewport =
         (viewportSize!).center(Offset.zero) - Offset(pageSizeAtZoomLevel.width / 2, pageSizeAtZoomLevel.height / 2);
     final contentAboveDesiredPage = pageSizeAtZoomLevel.height * pageIndex;
     final desiredOrigin = Offset(0, -contentAboveDesiredPage) + desiredPageTopLeftInViewport;
-    _origin = _constrainOriginToViewportBounds(desiredOrigin);
-
-    notifyListeners();
+    return _constrainOriginToViewportBounds(desiredOrigin);
   }
 
   /// Immediately changes the viewport offset so that the given [pixelOffsetInPage], within the  page at the given
@@ -640,6 +684,10 @@ class RenderPageListViewport extends RenderBox {
 
       _isFirstLayoutForController = false;
     }
+
+    // We must let the controller do its layout work before we create and cull the pages,
+    // because the controller might change the offset of the viewport.
+    _controller!._onViewportLayout();
 
     _createAndCullVisibleAndCachedPages();
 
