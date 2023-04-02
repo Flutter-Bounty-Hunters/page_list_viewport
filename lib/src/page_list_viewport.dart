@@ -1194,7 +1194,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 
     // If the viewport hit a wall, or if the simulations are done, stop
     // ticking.
-    if (translate.distance < 1) {
+    if (translate.distance < 0.5) {
       // if (originBeforeDelta == widget.controller.origin || _frictionSimulation!.isDone(secondsFraction)) {
       print("Stopping simulation. Translation: $translate");
       _ticker.stop();
