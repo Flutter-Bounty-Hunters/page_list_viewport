@@ -1,10 +1,12 @@
 import 'dart:collection';
 import 'dart:developer';
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/physics.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:vector_math/vector_math_64.dart';
@@ -481,7 +483,7 @@ class RenderPageListViewport extends RenderBox {
 
   double _minimumScaleToFillViewport = 1.0;
 
-  double get _contentScale => max(_controller!.scale, _minimumScaleToFillViewport);
+  double get _contentScale => math.max(_controller!.scale, _minimumScaleToFillViewport);
 
   Size get _scaledPageSize => _naturalPageSize * _contentScale;
 
@@ -814,19 +816,19 @@ class RenderPageListViewport extends RenderBox {
   }
 
   int _findFirstPaintedPageIndex() {
-    return max(_findFirstVisiblePageIndex() - _pagePaintCacheCount, 0);
+    return math.max(_findFirstVisiblePageIndex() - _pagePaintCacheCount, 0);
   }
 
   int _findLastPaintedPageIndex() {
-    return min(_findLastVisiblePageIndex() + _pagePaintCacheCount, _pageCount - 1);
+    return math.min(_findLastVisiblePageIndex() + _pagePaintCacheCount, _pageCount - 1);
   }
 
   int _findFirstCachedPageIndex() {
-    return max(_findFirstVisiblePageIndex() - _pageLayoutCacheCount, 0);
+    return math.max(_findFirstVisiblePageIndex() - _pageLayoutCacheCount, 0);
   }
 
   int _findLastCachedPageIndex() {
-    return min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
+    return math.min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
   }
 }
 
@@ -1131,14 +1133,17 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   void _startMomentum() {
     PageListViewportLogs.pagesListGestures.fine("Starting momentum...");
     final velocity = _panAndScaleVelocityTracker.velocity;
+    print("INITIAL VELOCITY: $velocity");
     PageListViewportLogs.pagesListGestures.fine("Starting momentum with velocity: $velocity");
 
     _frictionSimulation = PanningFrictionSimulation(
       position: widget.controller.origin,
       velocity: velocity,
     );
+    _velocity = velocity;
 
     if (!_ticker.isTicking) {
+      _lastTime = Duration.zero;
       _ticker.start();
     }
   }
@@ -1149,19 +1154,39 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
   }
 
+  Duration _lastTime = Duration.zero;
+  Offset _velocity = Offset.zero;
   void _onFrictionTick(Duration elapsedTime) {
     if (elapsedTime == Duration.zero) {
       return;
     }
 
-    final secondsFraction = elapsedTime.inMilliseconds / 1000;
-    final currentVelocity = _frictionSimulation!.dx(secondsFraction);
+    print("_onFrictionTick() - $elapsedTime");
+    final dt = elapsedTime - _lastTime;
+    _lastTime = elapsedTime;
+    final secondsFraction = dt.inMilliseconds / 1000;
+    // final currentVelocity = _frictionSimulation!.dx(secondsFraction);
+    print("currentVelocity: $_velocity");
+    final dp = _velocity * secondsFraction;
+    print("translation: $dp");
     final originBeforeDelta = widget.controller.origin;
-    final newOrigin = _frictionSimulation!.x(secondsFraction);
+    // final newOrigin = _frictionSimulation!.x(secondsFraction);
+    final newOrigin = widget.controller.origin + dp;
+    print("newOrigin: $newOrigin");
     final translate = newOrigin - originBeforeDelta;
 
-    PageListViewportLogs.pagesListGestures.finest(
-        "Friction tick. Time: ${elapsedTime.inMilliseconds}ms. Velocity: $currentVelocity. Movement: $translate");
+    final direction = Offset.fromDirection(_velocity.direction);
+    // _velocity = _velocity - (direction * math.min(50, _velocity.distance));
+
+    // We want:
+    // - a decay of 2% when moving very fast (less drag when flinging fast)
+    // - a decay of 5% when moving slowly (more drag when coming to rest)
+    final velocityIntensity = math.pow((_velocity.distance / kMaxFlingVelocity).clamp(0.0, 1.0), 1 / 4.0).toDouble();
+    final drag = lerpDouble(0.06, 0.03, velocityIntensity)!;
+    _velocity = _velocity - (direction * _velocity.distance * drag);
+
+    PageListViewportLogs.pagesListGestures
+        .finest("Friction tick. Time: ${elapsedTime.inMilliseconds}ms. Velocity: $_velocity. Movement: $translate");
 
     widget.controller.translate(translate);
 
@@ -1169,7 +1194,9 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 
     // If the viewport hit a wall, or if the simulations are done, stop
     // ticking.
-    if (originBeforeDelta == widget.controller.origin || _frictionSimulation!.isDone(secondsFraction)) {
+    if (translate.distance < 1) {
+      // if (originBeforeDelta == widget.controller.origin || _frictionSimulation!.isDone(secondsFraction)) {
+      print("Stopping simulation. Translation: $translate");
       _ticker.stop();
     }
   }
@@ -1383,16 +1410,28 @@ class PanningFrictionSimulation {
     required Offset velocity,
   })  : _position = position,
         _velocity = velocity {
-    _xSimulation = ClampingScrollSimulation(
-        position: _position.dx, velocity: _velocity.dx, tolerance: const Tolerance(velocity: 0.001));
-    _ySimulation = ClampingScrollSimulation(
-        position: _position.dy, velocity: _velocity.dy, tolerance: const Tolerance(velocity: 0.001));
+    _xSimulation = MagicalFrictionSimulation(
+      0.00001,
+      0.00001,
+      _position.dx,
+      _velocity.dx,
+      tolerance: Tolerance.defaultTolerance,
+      debugLabel: "x",
+    );
+    _ySimulation = MagicalFrictionSimulation(
+      0.0001,
+      0.0001,
+      _position.dy,
+      _velocity.dy,
+      tolerance: Tolerance.defaultTolerance,
+      debugLabel: "y",
+    );
   }
 
   final Offset _position;
   final Offset _velocity;
-  late final ClampingScrollSimulation _xSimulation;
-  late final ClampingScrollSimulation _ySimulation;
+  late final Simulation _xSimulation;
+  late final Simulation _ySimulation;
 
   Offset x(double time) {
     return Offset(
@@ -1409,4 +1448,134 @@ class PanningFrictionSimulation {
   }
 
   bool isDone(double time) => _xSimulation.isDone(time) && _ySimulation.isDone(time);
+}
+
+class MagicalFrictionSimulation extends Simulation {
+  MagicalFrictionSimulation(
+    this._minDrag,
+    this._maxDrag,
+    double position,
+    double velocity, {
+    super.tolerance,
+    String? debugLabel,
+  })  : _x = position,
+        _v = velocity,
+        _previousX = position,
+        _previousVelocity = velocity,
+        _debugLabel = debugLabel;
+
+  final double _x;
+  final double _v;
+  final double _minDrag;
+  final double _maxDrag;
+  double _previousTime = 0;
+  double _previousX;
+  double _previousVelocity;
+
+  final String? _debugLabel;
+
+  @override
+  double x(double time) {
+    if (_debugLabel == "y") {
+      print("x() - time: $time");
+    }
+    assert(time >= _previousTime);
+    if (time == 0) {
+      return _previousX;
+    }
+
+    // final drag = _getDrag(_previousVelocity);
+    // final dragLog = math.log(drag);
+    // final offset = _x + (_v * math.pow(drag, time) / dragLog) - (_v / dragLog);
+    final dt = time - _previousTime;
+    final velocity = dx(time);
+    final translation = velocity * dt;
+
+    final offset = _previousX + velocity;
+
+    _previousTime = time;
+
+    // final delta = offset - _previousX;
+    if (_debugLabel == "y") {
+      print("Position ($_debugLabel): $offset, dt: $dt, dx: $translation, velocity: $velocity");
+      print("Updating offset from $_previousX to $offset");
+    }
+    // if (delta / delta.abs() != _v / _v.abs()) {
+    //   return _previousX;
+    // }
+
+    _previousX = offset;
+    return offset;
+  }
+
+  @override
+  double dx(double time) {
+    if (_debugLabel == "y") {
+      print("dx() - time: $time");
+    }
+    assert(time >= _previousTime);
+    if (time == 0) {
+      return _previousVelocity;
+    }
+
+    final dt = time - _previousTime;
+    final direction = _previousVelocity / _previousVelocity.abs();
+    late final double newVelocity;
+    if (direction >= 0) {
+      newVelocity = math.max(_previousVelocity - 10, 0);
+    } else {
+      newVelocity = math.min(_previousVelocity + 10, 0);
+    }
+    // (lerpDouble(0.2, 0.2, 1.0 - (_previousVelocity.abs().clamp(0, kMaxFlingVelocity) / kMaxFlingVelocity))! *
+    //     _previousVelocity);
+    _previousVelocity = newVelocity;
+
+    _previousTime = time;
+
+    if (_debugLabel == "y") {
+      print("Velocity ($_debugLabel): $newVelocity, dt: $dt");
+    }
+
+    // if (newVelocity / newVelocity.abs() != _v / _v.abs()) {
+    //   return 0.0;
+    // }
+
+    return newVelocity;
+  }
+
+  @override
+  bool isDone(double time) {
+    final isDone = dx(time).abs() < tolerance.velocity;
+    if (_debugLabel == "y") {
+      if (isDone) {
+        print("Done!");
+      } else {
+        print("Not done!");
+      }
+    }
+    return isDone;
+  }
+
+  double _getDrag(double velocity) {
+    // final drag = lerpDouble(_minDrag, _maxDrag, _previousTime.clamp(0.0, 10.0) / 10.0)!;
+    // if (_debugLabel == "y") {
+    //   print("Drag ($_debugLabel) (time: $_previousTime): $drag");
+    // }
+    // return drag;
+
+    if (_debugLabel == "y") {
+      print("Velocity ($_debugLabel): ${velocity}");
+    }
+    const maxFlingVelocity = kMaxFlingVelocity;
+    final highVelocityPercent = velocity.abs().clamp(0, maxFlingVelocity) / maxFlingVelocity;
+    final drag = Curves.easeOut.transform(lerpDouble(_minDrag, _maxDrag, highVelocityPercent)!);
+    if (_debugLabel == "y") {
+      print("Drag ($_debugLabel) (percent: $highVelocityPercent): $drag");
+    }
+    return drag;
+  }
+
+  // @override
+  // String toString() => '${objectRuntimeType(this, 'MagicalFrictionSimulation')}'
+  //     '(cₓ: ${_drag.toStringAsFixed(1)}, x₀: ${_x.toStringAsFixed(1)}, dx₀: ${_v.toStringAsFixed(1)})';
 }
