@@ -1,6 +1,6 @@
 import 'dart:collection';
 import 'dart:developer';
-import 'dart:math';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
@@ -481,7 +481,7 @@ class RenderPageListViewport extends RenderBox {
 
   double _minimumScaleToFillViewport = 1.0;
 
-  double get _contentScale => max(_controller!.scale, _minimumScaleToFillViewport);
+  double get _contentScale => math.max(_controller!.scale, _minimumScaleToFillViewport);
 
   Size get _scaledPageSize => _naturalPageSize * _contentScale;
 
@@ -814,19 +814,19 @@ class RenderPageListViewport extends RenderBox {
   }
 
   int _findFirstPaintedPageIndex() {
-    return max(_findFirstVisiblePageIndex() - _pagePaintCacheCount, 0);
+    return math.max(_findFirstVisiblePageIndex() - _pagePaintCacheCount, 0);
   }
 
   int _findLastPaintedPageIndex() {
-    return min(_findLastVisiblePageIndex() + _pagePaintCacheCount, _pageCount - 1);
+    return math.min(_findLastVisiblePageIndex() + _pagePaintCacheCount, _pageCount - 1);
   }
 
   int _findFirstCachedPageIndex() {
-    return max(_findFirstVisiblePageIndex() - _pageLayoutCacheCount, 0);
+    return math.max(_findFirstVisiblePageIndex() - _pageLayoutCacheCount, 0);
   }
 
   int _findLastCachedPageIndex() {
-    return min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
+    return math.min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
   }
 }
 
@@ -1019,7 +1019,6 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   Offset? _startOffset;
   int? _endTimeInMillis;
   late Ticker _ticker;
-  PanningFrictionSimulation? _frictionSimulation;
 
   @override
   void initState() {
@@ -1133,12 +1132,10 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     final velocity = _panAndScaleVelocityTracker.velocity;
     PageListViewportLogs.pagesListGestures.fine("Starting momentum with velocity: $velocity");
 
-    _frictionSimulation = PanningFrictionSimulation(
-      position: widget.controller.origin,
-      velocity: velocity,
-    );
+    _velocity = velocity;
 
     if (!_ticker.isTicking) {
+      _lastTime = Duration.zero;
       _ticker.start();
     }
   }
@@ -1149,19 +1146,32 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
   }
 
+  Duration _lastTime = Duration.zero;
+  Offset _velocity = Offset.zero;
   void _onFrictionTick(Duration elapsedTime) {
     if (elapsedTime == Duration.zero) {
       return;
     }
 
-    final secondsFraction = elapsedTime.inMilliseconds / 1000;
-    final currentVelocity = _frictionSimulation!.dx(secondsFraction);
+    final dt = elapsedTime - _lastTime;
+    _lastTime = elapsedTime;
+    final secondsFraction = dt.inMilliseconds / 1000;
+    final dp = _velocity * secondsFraction;
     final originBeforeDelta = widget.controller.origin;
-    final newOrigin = _frictionSimulation!.x(secondsFraction);
+    final newOrigin = widget.controller.origin + dp;
     final translate = newOrigin - originBeforeDelta;
 
-    PageListViewportLogs.pagesListGestures.finest(
-        "Friction tick. Time: ${elapsedTime.inMilliseconds}ms. Velocity: $currentVelocity. Movement: $translate");
+    final direction = Offset.fromDirection(_velocity.direction);
+
+    // We want:
+    // - a decay of 3% when moving very fast (less drag when flinging fast)
+    // - a decay of 6% when moving slowly (more drag when coming to rest)
+    final velocityIntensity = math.pow((_velocity.distance / kMaxFlingVelocity).clamp(0.0, 1.0), 1 / 4.0).toDouble();
+    final drag = lerpDouble(0.06, 0.03, velocityIntensity)!;
+    _velocity = _velocity - (direction * _velocity.distance * drag);
+
+    PageListViewportLogs.pagesListGestures
+        .finest("Friction tick. Time: ${elapsedTime.inMilliseconds}ms. Velocity: $_velocity. Movement: $translate");
 
     widget.controller.translate(translate);
 
@@ -1169,7 +1179,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 
     // If the viewport hit a wall, or if the simulations are done, stop
     // ticking.
-    if (originBeforeDelta == widget.controller.origin || _frictionSimulation!.isDone(secondsFraction)) {
+    if (translate.distance < 0.5) {
       _ticker.stop();
     }
   }
@@ -1375,38 +1385,4 @@ class Clock {
 class FakeClock implements Clock {
   @override
   int millis = 0;
-}
-
-class PanningFrictionSimulation {
-  PanningFrictionSimulation({
-    required Offset position,
-    required Offset velocity,
-  })  : _position = position,
-        _velocity = velocity {
-    _xSimulation = ClampingScrollSimulation(
-        position: _position.dx, velocity: _velocity.dx, tolerance: const Tolerance(velocity: 0.001));
-    _ySimulation = ClampingScrollSimulation(
-        position: _position.dy, velocity: _velocity.dy, tolerance: const Tolerance(velocity: 0.001));
-  }
-
-  final Offset _position;
-  final Offset _velocity;
-  late final ClampingScrollSimulation _xSimulation;
-  late final ClampingScrollSimulation _ySimulation;
-
-  Offset x(double time) {
-    return Offset(
-      _xSimulation.x(time),
-      _ySimulation.x(time),
-    );
-  }
-
-  Offset dx(double time) {
-    return Offset(
-      _xSimulation.dx(time),
-      _ySimulation.dx(time),
-    );
-  }
-
-  bool isDone(double time) => _xSimulation.isDone(time) && _ySimulation.isDone(time);
 }
