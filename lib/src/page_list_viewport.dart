@@ -667,6 +667,12 @@ class RenderPageListViewport extends RenderBox {
   @override
   void performLayout() {
     size = constraints.biggest;
+    if (size.width == 0) {
+      // Our content calculations depend on a non-zero width. If we have no width, there's
+      // nothing to layout or paint anyway. Bail out now and avoid adding code to account
+      // for zero width.
+      return;
+    }
 
     _minimumScaleToFillViewport = size.width / _naturalPageSize.width;
     _controller!._minimumScale = _minimumScaleToFillViewport;
@@ -774,6 +780,13 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void paint(PaintingContext context, Offset offset) {
+    if (size.width == 0) {
+      // Our content calculations depend on a non-zero width. If we have no width, there's
+      // nothing to layout or paint anyway. Bail out now and avoid adding code to account
+      // for zero width.
+      return;
+    }
+
     final childElements = _element!._childElements;
     final firstPageToPaintIndex = _findFirstPaintedPageIndex();
     final lastPageToPaintIndex = _findLastPaintedPageIndex();
