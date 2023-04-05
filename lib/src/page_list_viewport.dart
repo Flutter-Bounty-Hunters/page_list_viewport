@@ -1026,6 +1026,11 @@ class PageListViewportGestures extends StatefulWidget {
     this.onDoubleTapDown,
     this.onDoubleTap,
     this.onDoubleTapCancel,
+    this.panAndZoomPointerDevices = const {
+      PointerDeviceKind.mouse,
+      PointerDeviceKind.trackpad,
+      PointerDeviceKind.touch,
+    },
     this.clock = const Clock(),
     required this.child,
   }) : super(key: key);
@@ -1044,6 +1049,8 @@ class PageListViewportGestures extends StatefulWidget {
   final void Function(TapDownDetails)? onDoubleTapDown;
   final void Function()? onDoubleTap;
   final void Function()? onDoubleTapCancel;
+
+  final Set<PointerDeviceKind> panAndZoomPointerDevices;
 
   /// Reports the time, so that the gesture system can track how much
   /// time has passed.
@@ -1252,6 +1259,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
         onScaleEnd: _onScaleEnd,
+        supportedDevices: widget.panAndZoomPointerDevices,
         child: widget.child,
       ),
     );
