@@ -454,6 +454,9 @@ class PageListViewportController with ChangeNotifier {
     _scaleVelocity = (_scale - _previousScale) / (_scaleVelocityStopwatch.elapsedMilliseconds / 1000);
     _scaleVelocityStopwatch.reset();
 
+    // Snap the content back to the viewport edges.
+    _origin = _constrainOriginToViewportBounds(_origin);
+
     notifyListeners();
   }
 
