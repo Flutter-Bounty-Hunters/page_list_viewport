@@ -5,7 +5,6 @@ import 'package:page_list_viewport/page_list_viewport.dart';
 void main() {
   PageListViewportLogs.initLoggers(Level.ALL, {
     // PageListViewportLogs.pagesList,
-    PageListViewportLogs.pagesListGesturesVelocity,
   });
 
   runApp(const MyApp());
@@ -50,7 +49,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageListViewportGestures(
+      body: DeprecatedPageListViewportGestures(
         controller: _controller,
         child: PageListViewport(
           controller: _controller,
