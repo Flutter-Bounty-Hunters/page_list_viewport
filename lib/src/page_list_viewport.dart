@@ -1303,18 +1303,20 @@ class PanAndScaleVelocityTracker {
   int? _previousGesturePointerCount;
 
   int? _currentGestureStartTimeInMillis;
-  _PanAndScaleGestureAction? _currentGestureStartAction;
+  PanAndScaleGestureAction? _currentGestureStartAction;
   bool _isPossibleGestureContinuation = false;
 
   Offset get velocity => _launchVelocity;
   Offset _launchVelocity = Offset.zero;
+  final _recentVelocity = <_VelocitySlice>[];
+  int _lastScaleTime = 0;
 
   void onScaleStart(ScaleStartDetails details) {
     PageListViewportLogs.pagesListGestures.fine(
         "onScaleStart() - pointer count: ${details.pointerCount}, time since last gesture: ${_timeSinceLastGesture?.inMilliseconds}ms");
 
     if (_previousPointerCount == 0) {
-      _currentGestureStartAction = _PanAndScaleGestureAction.firstFingerDown;
+      _currentGestureStartAction = PanAndScaleGestureAction.firstFingerDown;
     } else if (details.pointerCount > _previousPointerCount) {
       // This situation might signify:
       //
@@ -1323,9 +1325,9 @@ class PanAndScaleVelocityTracker {
       //
       //  2. The user was panning with 1 finger and just added a 2nd finger to start
       //     scaling.
-      _currentGestureStartAction = _PanAndScaleGestureAction.addFinger;
+      _currentGestureStartAction = PanAndScaleGestureAction.addFinger;
     } else if (details.pointerCount == 0) {
-      _currentGestureStartAction = _PanAndScaleGestureAction.removeLastFinger;
+      _currentGestureStartAction = PanAndScaleGestureAction.removeLastFinger;
     } else {
       // This situation might signify:
       //
@@ -1334,7 +1336,7 @@ class PanAndScaleVelocityTracker {
       //
       //  2. The user was scaling with 2 fingers and just removed 1 finger to start
       //     panning instead of scaling.
-      _currentGestureStartAction = _PanAndScaleGestureAction.removeNonLastFinger;
+      _currentGestureStartAction = PanAndScaleGestureAction.removeNonLastFinger;
     }
     PageListViewportLogs.pagesListGestures.fine(" - start action: $_currentGestureStartAction");
     _currentGestureStartTimeInMillis = _clock.millis;
@@ -1348,6 +1350,8 @@ class PanAndScaleVelocityTracker {
       _isPossibleGestureContinuation = false;
       _previousGesturePointerCount = details.pointerCount;
       _launchVelocity = Offset.zero;
+      _lastScaleTime = _clock.millis;
+      _recentVelocity.clear();
     }
 
     _previousPointerCount = details.pointerCount;
@@ -1370,9 +1374,26 @@ class PanAndScaleVelocityTracker {
       _currentGestureStartTimeInMillis = _clock.millis;
       _previousGesturePointerCount = details.pointerCount;
       _launchVelocity = Offset.zero;
+      _lastScaleTime = _clock.millis;
+      _recentVelocity.clear();
+      PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
 
       _isPossibleGestureContinuation = false;
+
+      return;
     }
+
+    // Update velocity tracking.
+    if (_recentVelocity.length == 20) {
+      _recentVelocity.removeAt(0);
+    }
+
+    final velocitySlice =
+        _VelocitySlice(translation: details.focalPointDelta, dtInMillis: _clock.millis - _lastScaleTime);
+    PageListViewportLogs.pagesListGesturesVelocity.finer(
+        "Velocity: ${velocitySlice.pixelsPerSecond} pixels/second (focal delta: ${details.focalPointDelta}) (dt: ${velocitySlice.seconds})");
+    _recentVelocity.add(velocitySlice);
+    _lastScaleTime = _clock.millis;
   }
 
   void onScaleEnd(ScaleEndDetails details) {
@@ -1410,6 +1431,9 @@ class PanAndScaleVelocityTracker {
       PageListViewportLogs.pagesListGestures
           .fine(" - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
       _launchVelocity = Offset.zero;
+      _lastScaleTime = _clock.millis;
+      _recentVelocity.clear();
+      PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
       return;
     }
 
@@ -1421,7 +1445,16 @@ class PanAndScaleVelocityTracker {
       return;
     }
 
-    _launchVelocity = details.velocity.pixelsPerSecond;
+    PageListViewportLogs.pagesListGesturesVelocity
+        .finer("Ending velocity: ${details.velocity.pixelsPerSecond} pixels per second");
+    // _launchVelocity = details.velocity.pixelsPerSecond;
+    _launchVelocity = _recentVelocity
+        .fold(_VelocitySlice.zero, (totalVelocity, velocitySlice) => totalVelocity + velocitySlice)
+        .pixelsPerSecond;
+    _recentVelocity.clear();
+    PageListViewportLogs.pagesListGesturesVelocity
+        .finer("Average velocity (launch velocity): $_launchVelocity pixels per second");
+    PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
     PageListViewportLogs.pagesListGestures
         .fine(" - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
   }
@@ -1433,7 +1466,30 @@ class PanAndScaleVelocityTracker {
       : null;
 }
 
-enum _PanAndScaleGestureAction {
+class _VelocitySlice {
+  static const zero = _VelocitySlice(translation: Offset.zero, dtInMillis: 0);
+
+  const _VelocitySlice({
+    required this.translation,
+    required this.dtInMillis,
+  });
+
+  final Offset translation;
+  final int dtInMillis;
+
+  _VelocitySlice operator +(_VelocitySlice other) {
+    return _VelocitySlice(
+      translation: translation + other.translation,
+      dtInMillis: dtInMillis + other.dtInMillis,
+    );
+  }
+
+  Offset get pixelsPerSecond => seconds > 0 ? translation / seconds : Offset.zero;
+
+  double get seconds => dtInMillis / 1000.0;
+}
+
+enum PanAndScaleGestureAction {
   firstFingerDown,
   addFinger,
   removeNonLastFinger,
