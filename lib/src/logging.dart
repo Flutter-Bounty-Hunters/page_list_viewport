@@ -8,12 +8,14 @@ class LogNames {
   static const pagesListController = 'pdf.pagesList.controller';
   static const pagesListGestures = 'pdf.pagesList.gestures';
   static const pagesListGesturesVelocity = 'pdf.pagesList.gestures.velocity';
+  static const pagesListOptimizer = 'pdf.pagesList.optimizer';
 }
 
 class PageListViewportLogs {
   static final pagesList = logging.Logger(LogNames.pagesList);
   static final pagesListController = logging.Logger(LogNames.pagesListController);
   static final pagesListGestures = logging.Logger(LogNames.pagesListGestures);
+  static final pagesListOptimizer = logging.Logger(LogNames.pagesListOptimizer);
   static final pagesListGesturesVelocity = logging.Logger(LogNames.pagesListGesturesVelocity);
 
   static final _activeLoggers = <logging.Logger>{};
