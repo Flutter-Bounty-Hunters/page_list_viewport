@@ -769,8 +769,21 @@ class RenderPageListViewport extends RenderBox {
         },
       );
     });
+    if (didHitChild) {
+      return true;
+    }
 
-    return didHitChild;
+    if (hitTestSelf(position)) {
+      result.add(BoxHitTestEntry(this, position));
+      return true;
+    }
+
+    return false;
+  }
+
+  @override
+  bool hitTestSelf(Offset position) {
+    return size.contains(position);
   }
 
   void _visitLayoutChildren(Function(int pageIndex, Element? childElement) visitor) {
