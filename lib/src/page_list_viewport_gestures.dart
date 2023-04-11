@@ -43,7 +43,7 @@ class PageListViewportGestures extends StatefulWidget {
   /// Whether the user should be locked into horizontal or vertical scrolling,
   /// when the user pans roughly in those directions.
   ///
-  /// When the drags near 45 degrees, the user retains full pan control.
+  /// When the user drags near 45 degrees, the user retains full pan control.
   final bool lockPanAxis;
 
   /// Reports the time, so that the gesture system can track how much
