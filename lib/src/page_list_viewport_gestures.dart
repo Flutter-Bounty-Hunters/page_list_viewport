@@ -427,7 +427,7 @@ class PanningFrictionSimulation {
         // near the end (when it smoothly slides to zero).
         constantDeceleration: 2.35,
       ),
-      dxMin: -2000,
+      dxMin: -2000, // Scroll up more slowly than scrolling down. A config found in some other scrolling systems.
       dxMax: 3000,
     );
   }
