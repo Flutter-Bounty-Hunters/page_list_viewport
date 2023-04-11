@@ -312,8 +312,16 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
-  static double kViewportMinFlingVelocity = 600;
-  static double kViewportMinFlingDistance = 60;
+  /// The maximum velocity a gesture can have and still be considered a viewport
+  /// re-adjustment. Used in tandem with the [kViewportReAdjustmentMinTranslationDistance]
+  /// to determine if the user is re-adjusting the viewport. Viewport re-adjustments
+  /// result in the momentum simulation to be aborted.
+  static double kViewportReAdjustmentMaxVelocity = 600;
+
+  /// The minimum distance the viewport must be translated such that the
+  /// gesture is considered a viewport re-adjustment which results in the
+  /// momentum simulation to be aborted.
+  static double kViewportReAdjustmentMinTranslationDistance = 60;
 
   DeprecatedPanAndScaleVelocityTracker({
     required Clock clock,
@@ -486,7 +494,8 @@ class PanningFrictionSimulation {
     required Offset velocity,
   })  : _position = position,
         _velocity = velocity {
-    // Clamping bounds determines how long the simulation will run. Larger numbers slide for longer,
+    // Clamping bounds enforces a maximum instantaneous velocity of the viewport
+    // and in turn, how long the simulation will run. Larger numbers slide for longer,
     // smaller numbers end more quickly.
     _xSimulation = ClampedSimulation(
       FrictionSimulation(
