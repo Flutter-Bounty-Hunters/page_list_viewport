@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/scheduler.dart';
@@ -19,6 +21,7 @@ class PageListViewportGestures extends StatefulWidget {
     this.onDoubleTapDown,
     this.onDoubleTap,
     this.onDoubleTapCancel,
+    this.lockPanAxis = false,
     this.clock = const Clock(),
     required this.child,
   }) : super(key: key);
@@ -37,6 +40,12 @@ class PageListViewportGestures extends StatefulWidget {
   final void Function()? onDoubleTap;
   final void Function()? onDoubleTapCancel;
 
+  /// Whether the user should be locked into horizontal or vertical scrolling,
+  /// when the user pans roughly in those directions.
+  ///
+  /// When the drags near 45 degrees, the user retains full pan control.
+  final bool lockPanAxis;
+
   /// Reports the time, so that the gesture system can track how much
   /// time has passed.
   ///
@@ -50,7 +59,15 @@ class PageListViewportGestures extends StatefulWidget {
 
 class _PageListViewportGesturesState extends State<PageListViewportGestures> with TickerProviderStateMixin {
   bool _isPanningEnabled = true;
+
   bool _isPanning = false;
+
+  bool _hasChosenWhetherToLock = false;
+  bool _isLockedHorizontal = false;
+  bool _isLockedVertical = false;
+
+  Offset? _panAndScaleFocalPoint; // Point where the current gesture began.
+
   late DeprecatedPanAndScaleVelocityTracker _panAndScaleVelocityTracker;
   double? _startContentScale;
   Offset? _startOffset;
@@ -95,19 +112,19 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       return;
     }
     _isPanning = true;
+
     final timeSinceLastGesture = _endTimeInMillis != null ? _timeSinceEndOfLastGesture : null;
     _startContentScale = widget.controller.scale;
     _startOffset = widget.controller.origin;
-    _referenceFocalPoint = details.localFocalPoint;
+    _panAndScaleFocalPoint = details.localFocalPoint;
     _panAndScaleVelocityTracker.onScaleStart(details);
+
     if ((timeSinceLastGesture == null || timeSinceLastGesture > const Duration(milliseconds: 30))) {
       // We've started a new gesture after a reasonable period of time since the
       // last gesture. Stop any momentum from the last gesture.
       _stopMomentum();
     }
   }
-
-  Offset? _referenceFocalPoint; // Point where the current gesture began.
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
     PageListViewportLogs.pagesList
@@ -117,6 +134,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       // or scale with a stylus.
       return;
     }
+
     if (!_isPanningEnabled) {
       PageListViewportLogs.pagesListGestures.finer("Started panning when the stylus was down. Resetting transform to:");
       PageListViewportLogs.pagesListGestures.finer(" - origin: ${widget.controller.origin}");
@@ -133,16 +151,60 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
         ..translate(_startOffset! - widget.controller.origin);
       return;
     }
-    _panAndScaleVelocityTracker.onScaleUpdate(details);
+
     // Translate so that the same point in the scene is underneath the
     // focal point before and after the movement.
-    final Offset translationChange = details.localFocalPoint - _referenceFocalPoint!;
-    _referenceFocalPoint = details.localFocalPoint;
+    Offset focalPointTranslation = details.localFocalPoint - _panAndScaleFocalPoint!;
+
+    // (Maybe) Axis locking.
+    _lockPanningAxisIfDesired(focalPointTranslation, details.pointerCount);
+    focalPointTranslation = _restrictVectorToAxisIfDesired(focalPointTranslation);
+
+    _panAndScaleFocalPoint = _panAndScaleFocalPoint! + focalPointTranslation;
+
     widget.controller //
-      ..setScale(details.scale * _startContentScale!, details.localFocalPoint)
-      ..translate(translationChange);
+      ..setScale(details.scale * _startContentScale!, _panAndScaleFocalPoint!)
+      ..translate(focalPointTranslation);
+
+    _panAndScaleVelocityTracker.onScaleUpdate(_panAndScaleFocalPoint!, details.pointerCount);
+
     PageListViewportLogs.pagesListGestures
         .finer("New origin: ${widget.controller.origin}, scale: ${widget.controller.scale}");
+  }
+
+  void _lockPanningAxisIfDesired(Offset translation, int pointerCount) {
+    if (_hasChosenWhetherToLock) {
+      // We've already made our locking decision. Fizzle.
+      return;
+    }
+
+    if (translation.distance < 0.000001) {
+      // This means a distance of zero. We can't make a decision with zero translation.
+      // Fizzle and wait for the next panning notification.
+      return;
+    }
+
+    _hasChosenWhetherToLock = true;
+
+    if (!widget.lockPanAxis) {
+      // The developer explicitly requested no locked panning.
+      return;
+    }
+    if (pointerCount > 1) {
+      // We don't lock axis direction when scaling with 2 fingers.
+      return;
+    }
+
+    // Choose to lock in a particular axis direction, or not.
+    final movementAngle = translation.direction;
+    final movementAnglePositive = movementAngle.abs();
+    if (((2 / 6) * pi < movementAnglePositive) && (movementAnglePositive < (4 / 6) * pi)) {
+      PageListViewportLogs.pagesListGestures.finer("Locking panning into vertical-only movement.");
+      _isLockedVertical = true;
+    } else if (movementAnglePositive < (1 / 6) * pi || movementAnglePositive > (5 / 6) * pi) {
+      PageListViewportLogs.pagesListGestures.finer("Locking panning into horizontal-only movement.");
+      _isLockedHorizontal = true;
+    }
   }
 
   void _onScaleEnd(ScaleEndDetails details) {
@@ -151,10 +213,28 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       return;
     }
 
-    _panAndScaleVelocityTracker.onScaleEnd(details);
+    final velocity = _restrictVectorToAxisIfDesired(details.velocity.pixelsPerSecond);
+    _panAndScaleVelocityTracker.onScaleEnd(velocity, details.pointerCount);
     if (details.pointerCount == 0) {
       _startMomentum();
       _isPanning = false;
+      _hasChosenWhetherToLock = false;
+      _isLockedHorizontal = false;
+      _isLockedVertical = false;
+    }
+  }
+
+  /// (Maybe) Restricts a 2D vector to a single axis of motion, e.g., restricts a translation
+  /// vector, or a velocity vector to just horizontal or vertical motion.
+  ///
+  /// Restriction is based on the current state of [_isLockedHorizontal] and [_isLockedVertical].
+  Offset _restrictVectorToAxisIfDesired(Offset rawVector) {
+    if (_isLockedHorizontal) {
+      return Offset(rawVector.dx, 0.0);
+    } else if (_isLockedVertical) {
+      return Offset(0.0, rawVector.dy);
+    } else {
+      return rawVector;
     }
   }
 
@@ -298,11 +378,11 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     _previousPointerCount = details.pointerCount;
-    _startPosition = details.focalPoint;
+    _startPosition = details.localFocalPoint;
   }
 
-  void onScaleUpdate(ScaleUpdateDetails details) {
-    PageListViewportLogs.pagesListGestures.fine("Scale update: ${details.localFocalPoint}");
+  void onScaleUpdate(Offset localFocalPoint, int pointerCount) {
+    PageListViewportLogs.pagesListGestures.fine("Scale update: $localFocalPoint");
 
     if (_isPossibleGestureContinuation) {
       if (_timeSinceStartOfGesture < const Duration(milliseconds: 24)) {
@@ -316,27 +396,27 @@ class DeprecatedPanAndScaleVelocityTracker {
       PageListViewportLogs.pagesListGestures
           .fine(" - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
       _currentGestureStartTimeInMillis = _clock.millis;
-      _previousGesturePointerCount = details.pointerCount;
+      _previousGesturePointerCount = pointerCount;
       _launchVelocity = Offset.zero;
 
       _isPossibleGestureContinuation = false;
     }
 
-    _lastFocalPosition = details.focalPoint;
+    _lastFocalPosition = localFocalPoint;
   }
 
-  void onScaleEnd(ScaleEndDetails details) {
+  void onScaleEnd(Offset velocity, int pointerCount) {
     final gestureDuration = Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
     PageListViewportLogs.pagesListGestures.fine("onScaleEnd() - gesture duration: ${gestureDuration.inMilliseconds}");
 
     _previousGestureEndTimeInMillis = _clock.millis;
-    _previousPointerCount = details.pointerCount;
+    _previousPointerCount = pointerCount;
     _currentGestureStartAction = null;
     _currentGestureStartTimeInMillis = null;
 
     if (_isPossibleGestureContinuation) {
       PageListViewportLogs.pagesListGestures.fine(" - this gesture is a continuation of a previous gesture.");
-      if (details.pointerCount > 0) {
+      if (pointerCount > 0) {
         PageListViewportLogs.pagesListGestures.fine(
             " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.");
         return;
@@ -364,14 +444,13 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     final translationDistance = (_lastFocalPosition - _startPosition).distance;
-    if (translationDistance > kViewportMinFlingDistance &&
-        details.velocity.pixelsPerSecond.distance < kViewportMinFlingVelocity) {
+    if (translationDistance > kViewportMinFlingDistance && velocity.distance < kViewportMinFlingVelocity) {
       // The user was readjusting the viewport by dragging it to the
       // new position.
       return;
     }
 
-    if (details.pointerCount > 0) {
+    if (pointerCount > 0) {
       PageListViewportLogs.pagesListGestures
           .fine(" - the user removed a finger, but is still interacting. Storing velocity for later.");
       PageListViewportLogs.pagesListGestures
@@ -379,7 +458,7 @@ class DeprecatedPanAndScaleVelocityTracker {
       return;
     }
 
-    _launchVelocity = details.velocity.pixelsPerSecond;
+    _launchVelocity = velocity;
     PageListViewportLogs.pagesListGestures
         .fine(" - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
   }

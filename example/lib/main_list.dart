@@ -52,6 +52,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
     return Scaffold(
       body: PageListViewportGestures(
         controller: _controller,
+        lockPanAxis: true,
         child: PageListViewport(
           controller: _controller,
           pageCount: 60, //_pageCount,
