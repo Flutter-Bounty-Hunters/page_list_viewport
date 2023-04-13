@@ -388,7 +388,7 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     _previousPointerCount = details.pointerCount;
-    _startPosition = details.localFocalPoint;
+    _startFocalPosition = details.localFocalPoint;
   }
 
   void onScaleUpdate(Offset localFocalPoint, int pointerCount) {
@@ -453,8 +453,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       return;
     }
 
-    final translationDistance = (_lastFocalPosition - _startPosition).distance;
-    if (translationDistance > kViewportMinFlingDistance && velocity.distance < kViewportMinFlingVelocity) {
+    final translationDistance = (_lastFocalPosition - _startFocalPosition).distance;
+    if (translationDistance > kViewportReAdjustmentMinTranslationDistance &&
+        velocity.distance < kViewportReAdjustmentMaxVelocity) {
       // The user was readjusting the viewport by dragging it to the
       // new position.
       return;
