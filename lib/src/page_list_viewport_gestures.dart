@@ -260,8 +260,6 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
   }
 
-  Duration? lastDuration;
-
   void _onFrictionTick(Duration elapsedTime) {
     if (elapsedTime == Duration.zero) {
       return;
@@ -314,8 +312,16 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
-  static double kViewportMinFlingVelocity = 600;
-  static double kViewportMinFlingDistance = 60;
+  /// The maximum velocity a gesture can have and still be considered a viewport
+  /// re-adjustment. Used in tandem with the [kViewportReAdjustmentMinTranslationDistance]
+  /// to determine if the user is re-adjusting the viewport. Viewport re-adjustments
+  /// result in the momentum simulation to be aborted.
+  static double kViewportReAdjustmentMaxVelocity = 600;
+
+  /// The minimum distance the viewport must be translated such that the
+  /// gesture is considered a viewport re-adjustment which results in the
+  /// momentum simulation to be aborted.
+  static double kViewportReAdjustmentMinTranslationDistance = 60;
 
   DeprecatedPanAndScaleVelocityTracker({
     required Clock clock,
@@ -333,7 +339,11 @@ class DeprecatedPanAndScaleVelocityTracker {
 
   Offset get velocity => _launchVelocity;
   Offset _launchVelocity = Offset.zero;
-  Offset _startPosition = Offset.zero;
+
+  /// The focal point when the gesture started.
+  Offset _startFocalPosition = Offset.zero;
+
+  /// The last focal point before the gesture ended
   Offset _lastFocalPosition = Offset.zero;
 
   void onScaleStart(ScaleStartDetails details) {
@@ -378,7 +388,7 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     _previousPointerCount = details.pointerCount;
-    _startPosition = details.localFocalPoint;
+    _startFocalPosition = details.localFocalPoint;
   }
 
   void onScaleUpdate(Offset localFocalPoint, int pointerCount) {
@@ -443,8 +453,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       return;
     }
 
-    final translationDistance = (_lastFocalPosition - _startPosition).distance;
-    if (translationDistance > kViewportMinFlingDistance && velocity.distance < kViewportMinFlingVelocity) {
+    final translationDistance = (_lastFocalPosition - _startFocalPosition).distance;
+    if (translationDistance > kViewportReAdjustmentMinTranslationDistance &&
+        velocity.distance < kViewportReAdjustmentMaxVelocity) {
       // The user was readjusting the viewport by dragging it to the
       // new position.
       return;
@@ -471,6 +482,11 @@ class DeprecatedPanAndScaleVelocityTracker {
 }
 
 class PanningFrictionSimulation {
+  // Dampening factors applied to each component of a [FrictionSimulation].
+  // Larger values result in the [FrictionSimulation] to accelerate faster and approach
+  // zero slower, giving the impression of the simulation being "more slippery".
+  // It was found through testing that other scroll systems seem to be use different dampening
+  // factors for the vertical and horizontal components.
   static const kVerticalDrag = 0.095;
   static const kHorizontalDrag = 0.0425;
 
@@ -479,7 +495,8 @@ class PanningFrictionSimulation {
     required Offset velocity,
   })  : _position = position,
         _velocity = velocity {
-    // Clamping bounds determines how long the simulation will run. Larger numbers slide for longer,
+    // Clamping bounds enforces a maximum instantaneous velocity of the viewport
+    // and in turn, how long the simulation will run. Larger numbers slide for longer,
     // smaller numbers end more quickly.
     _xSimulation = ClampedSimulation(
       FrictionSimulation(
@@ -506,7 +523,7 @@ class PanningFrictionSimulation {
         // near the end (when it smoothly slides to zero).
         constantDeceleration: 2.35,
       ),
-      dxMin: -2000, // Scroll up more slowly than scrolling down. A config found in some other scrolling systems.
+      dxMin: -2000, // Scroll down more slowly than scrolling up. A config found in some other scrolling systems.
       dxMax: 3000,
     );
   }
