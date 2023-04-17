@@ -22,6 +22,11 @@ class PageListViewportGestures extends StatefulWidget {
     this.onDoubleTap,
     this.onDoubleTapCancel,
     this.lockPanAxis = false,
+    this.panAndZoomPointerDevices = const {
+      PointerDeviceKind.mouse,
+      PointerDeviceKind.trackpad,
+      PointerDeviceKind.touch,
+    },
     this.clock = const Clock(),
     required this.child,
   }) : super(key: key);
@@ -39,6 +44,10 @@ class PageListViewportGestures extends StatefulWidget {
   final void Function(TapDownDetails)? onDoubleTapDown;
   final void Function()? onDoubleTap;
   final void Function()? onDoubleTapCancel;
+
+  /// The set of [PointerDeviceKind] the gesture detector should detect.
+  /// Any pointers not defined within the set will be ignored.
+  final Set<PointerDeviceKind> panAndZoomPointerDevices;
 
   /// Whether the user should be locked into horizontal or vertical scrolling,
   /// when the user pans roughly in those directions.
@@ -305,6 +314,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
         onScaleStart: _onScaleStart,
         onScaleUpdate: _onScaleUpdate,
         onScaleEnd: _onScaleEnd,
+        supportedDevices: widget.panAndZoomPointerDevices,
         child: widget.child,
       ),
     );
