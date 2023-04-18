@@ -1,12 +1,13 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:developer';
 import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
+import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
 
 import 'logging.dart';
@@ -115,6 +116,7 @@ class PageListViewportController with ChangeNotifier {
         _initialPageIndex = pageIndex,
         _origin = Offset.zero,
         _previousOrigin = Offset.zero,
+        _velocityStopwatch = Stopwatch(),
         _scale = scale,
         _previousScale = scale,
         _scaleVelocity = 0.0,
@@ -132,6 +134,7 @@ class PageListViewportController with ChangeNotifier {
     double maximumScale = double.infinity,
   })  : _origin = origin,
         _previousOrigin = origin,
+        _velocityStopwatch = Stopwatch(),
         _scale = scale,
         _previousScale = scale,
         _scaleVelocity = 0.0,
@@ -145,12 +148,15 @@ class PageListViewportController with ChangeNotifier {
     _animationController = AnimationController(vsync: vsync) //
       ..addListener(_onOrientationAnimationChange);
 
+    _velocityStopwatch.start();
     _scaleVelocityStopwatch.start();
   }
 
   @override
   void dispose() {
     _animationController.dispose();
+    _velocityStopwatch.stop();
+    _velocityResetTimer?.cancel();
     _scaleVelocityStopwatch.stop();
     super.dispose();
   }
@@ -188,9 +194,11 @@ class PageListViewportController with ChangeNotifier {
     notifyListeners();
   }
 
+  /// The velocity of the translation of the viewport origin.
   Offset get velocity => _velocity;
-
   Offset _velocity = Offset.zero;
+  final Stopwatch _velocityStopwatch;
+  Timer? _velocityResetTimer; // resets the velocity to zero if we haven't received a translation recently
 
   /// The scale of the content in the viewport.
   double get scale => _scale;
@@ -279,6 +287,8 @@ class PageListViewportController with ChangeNotifier {
     _animationController.stop();
 
     _origin = _getPageOffset(pageIndex, zoomLevel);
+    _velocity = Offset.zero;
+    _velocityStopwatch.reset();
 
     notifyListeners();
   }
@@ -313,7 +323,10 @@ class PageListViewportController with ChangeNotifier {
     final desiredPageTopLeftInViewport = (viewportSize!).center(-pageFocalPointAtZoomLevel);
     final contentAboveDesiredPage = pageSizeAtZoomLevel.height * pageIndex;
     final desiredOrigin = Offset(0, -contentAboveDesiredPage) + desiredPageTopLeftInViewport;
+
     _origin = _constrainOriginToViewportBounds(desiredOrigin);
+    _velocity = Offset.zero;
+    _velocityStopwatch.reset();
 
     notifyListeners();
   }
@@ -426,7 +439,28 @@ class PageListViewportController with ChangeNotifier {
         "Origin before adjustment: $_origin. Content height: ${_viewport!.calculateContentHeight(scale)}, Scale: $scale");
     PageListViewportLogs.pagesListController
         .fine("Viewport size: ${_viewport!.size}, scaled page width: ${_viewport!.calculatePageWidth(scale)}");
-    _origin = _constrainOriginToViewportBounds(desiredOrigin);
+
+    final newOrigin = _constrainOriginToViewportBounds(desiredOrigin);
+
+    _previousOrigin = _origin;
+    _origin = newOrigin;
+
+    // Update velocity tracking.
+    if (_velocityStopwatch.elapsedMilliseconds > 0) {
+      _velocity = (newOrigin - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
+      _velocityStopwatch.reset();
+      _velocityResetTimer?.cancel();
+
+      if (_velocity.distance > 0) {
+        // When the user is panning, we won't know when the final translation comes in.
+        // Therefore, to eventually report a velocity of zero, we need to assume that the
+        // absence of a message across a couple of frames indicates that we're done moving.
+        _velocityResetTimer = Timer(const Duration(milliseconds: 32), () {
+          _velocity = Offset.zero;
+          notifyListeners();
+        });
+      }
+    }
 
     notifyListeners();
   }
