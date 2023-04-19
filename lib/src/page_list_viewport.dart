@@ -2,11 +2,8 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:developer';
 import 'dart:math' as math;
-import 'dart:ui';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -269,6 +266,8 @@ class PageListViewportController with ChangeNotifier {
       // Jump to the desired page on viewport attachment.
       _origin = _getPageOffset(_initialPageIndex!);
       _initialPageIndex = null;
+    } else {
+      _origin = _constrainOriginToViewportBounds(_origin);
     }
   }
 
@@ -495,20 +494,35 @@ class PageListViewportController with ChangeNotifier {
   }
 
   Offset _constrainOriginToViewportBounds(Offset desiredOrigin) {
-    final totalContentHeight = _viewport!.calculateContentHeight(scale);
-    if (totalContentHeight >= _viewport!.size.height) {
-      // Content is as tall, or taller than the viewport.
-      return Offset(
-        desiredOrigin.dx.clamp(_viewport!.size.width - _viewport!.calculatePageWidth(scale), 0.0),
-        desiredOrigin.dy.clamp(-_viewport!.calculateContentHeight(scale) + _viewport!.size.height, 0.0),
-      );
+    // If content is thinner than a viewport dimension, that content should be centered.
+    //
+    // If content is as wide, or wider than a viewport dimension, that content offset should
+    // be constrained so that no white space ever appears on either side of the content along
+    // that dimension.
+    double originX = desiredOrigin.dx;
+    double originY = desiredOrigin.dy;
+
+    final contentWidth = _viewport!.calculatePageWidth(scale);
+    final contentHeight = _viewport!.calculateContentHeight(scale);
+    final viewportSize = _viewport!.size;
+
+    if (contentWidth <= viewportSize.width) {
+      originX = (viewportSize.width - contentWidth) / 2;
     } else {
-      // Content is shorter than the viewport.
-      return Offset(
-        desiredOrigin.dx.clamp(_viewport!.size.width - _viewport!.calculatePageWidth(scale), 0.0),
-        (_viewport!.size.height - totalContentHeight) / 2,
-      );
+      const maxOriginX = 0.0;
+      final minOriginX = viewportSize.width - contentWidth;
+      originX = originX.clamp(minOriginX, maxOriginX);
     }
+
+    if (contentHeight <= viewportSize.height) {
+      originY = (viewportSize.height - contentHeight) / 2;
+    } else {
+      const maxOriginY = 0.0;
+      final minOriginY = viewportSize.height - contentHeight;
+      originY = originY.clamp(minOriginY, maxOriginY);
+    }
+
+    return Offset(originX, originY);
   }
 }
 
@@ -712,7 +726,11 @@ class RenderPageListViewport extends RenderBox {
     }
 
     _minimumScaleToFillViewport = size.width / _naturalPageSize.width;
+
+    // Set the private property, directly, so that we don't try to markNeedsLayout during
+    // layout.
     _controller!._minimumScale = _minimumScaleToFillViewport;
+
     if (_isFirstLayoutForController && _pageCount > 0) {
       _controller!._scale = _minimumScaleToFillViewport;
 
@@ -726,6 +744,9 @@ class RenderPageListViewport extends RenderBox {
       }
 
       _isFirstLayoutForController = false;
+    } else if (_controller!.scale < _minimumScaleToFillViewport) {
+      // Update the private property so that we don't markNeedsLayout during layout.
+      _controller!._scale = _minimumScaleToFillViewport;
     }
 
     // We must let the controller do its layout work before we create and cull the pages,
