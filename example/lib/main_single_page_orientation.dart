@@ -58,6 +58,7 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
               controller: _controller,
               pageCount: 1,
               naturalPageSize: const Size(8.5, 11) * 72 * MediaQuery.of(context).devicePixelRatio,
+              // naturalPageSize: const Size(11, 8.5) * 72 * MediaQuery.of(context).devicePixelRatio,
               builder: (BuildContext context, int pageIndex) {
                 return Stack(
                   children: [
