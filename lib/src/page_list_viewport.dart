@@ -406,6 +406,7 @@ class PageListViewportController with ChangeNotifier {
           case AnimationStatus.dismissed:
           case AnimationStatus.completed:
             _velocity = Offset.zero;
+            notifyListeners();
             break;
           case AnimationStatus.forward:
           case AnimationStatus.reverse:
