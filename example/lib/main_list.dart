@@ -33,6 +33,9 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateMixin {
+  static const _pageCount = 20;
+  static const _naturalPageSizeInInches = Size(8.5, 11);
+
   late final PageListViewportController _controller;
 
   @override
@@ -50,51 +53,81 @@ class _MyHomePageState extends State<MyHomePage> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: PageListViewportGestures(
-        controller: _controller,
-        lockPanAxis: true,
-        child: PageListViewport(
-          controller: _controller,
-          pageCount: 60, //_pageCount,
-          naturalPageSize: const Size(8.5, 11) * 72 * MediaQuery.of(context).devicePixelRatio,
-          pageLayoutCacheCount: 3,
-          pagePaintCacheCount: 3,
-          builder: (BuildContext context, int pageIndex) {
-            return Stack(
-              children: [
-                Positioned.fill(
-                  child: Image.asset(
-                    "assets/test-image.jpeg",
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(32),
-                    color: Colors.white,
-                    child: Text("Page: $pageIndex"),
-                  ),
-                )
-              ],
-            );
+      body: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            width: 125,
+            child: _buildThumbnailList(),
+          ),
+          Expanded(
+            child: _buildViewport(),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // return RepaintBoundary(
-            //   key: ValueKey(pageIndex),
-            //   child: Container(
-            //     width: double.infinity,
-            //     height: double.infinity,
-            //     decoration: const BoxDecoration(
-            //       gradient: LinearGradient(
-            //         colors: [Colors.red, Colors.blue],
-            //         begin: Alignment.topLeft,
-            //         end: Alignment.bottomRight,
-            //       ),
-            //     ),
-            //   ),
-            // );
+  Widget _buildViewport() {
+    return PageListViewportGestures(
+      controller: _controller,
+      lockPanAxis: true,
+      child: PageListViewport(
+        controller: _controller,
+        pageCount: _pageCount,
+        naturalPageSize: _naturalPageSizeInInches * 72 * MediaQuery.of(context).devicePixelRatio,
+        pageLayoutCacheCount: 3,
+        pagePaintCacheCount: 3,
+        builder: (BuildContext context, int pageIndex) {
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: _buildPage(pageIndex),
+              ),
+              Center(
+                child: Container(
+                  padding: const EdgeInsets.all(32),
+                  color: Colors.white,
+                  child: Text("Page: $pageIndex"),
+                ),
+              )
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildThumbnailList() {
+    return RepaintBoundary(
+      child: ColoredBox(
+        color: Colors.grey.shade800,
+        child: ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: _pageCount,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: GestureDetector(
+                onTap: () {
+                  _controller.animateToPage(index, const Duration(milliseconds: 250));
+                },
+                child: AspectRatio(
+                  aspectRatio: _naturalPageSizeInInches.aspectRatio,
+                  child: _buildPage(index),
+                ),
+              ),
+            );
           },
         ),
       ),
+    );
+  }
+
+  Widget _buildPage(int pageIndex) {
+    return Image.asset(
+      "assets/test-image.jpeg",
+      fit: BoxFit.cover,
     );
   }
 }
