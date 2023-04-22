@@ -143,7 +143,18 @@ class PageListViewportController with ChangeNotifier {
 
   void _initController(TickerProvider vsync) {
     _animationController = AnimationController(vsync: vsync) //
-      ..addListener(_onOrientationAnimationChange);
+      ..addListener(_onOrientationAnimationChange)
+      ..addStatusListener((status) {
+        switch (status) {
+          case AnimationStatus.dismissed:
+          case AnimationStatus.completed:
+            _onOrientationAnimationEnd();
+            break;
+          case AnimationStatus.forward:
+          case AnimationStatus.reverse:
+            break;
+        }
+      });
 
     _velocityStopwatch.start();
     _scaleVelocityStopwatch.start();
@@ -416,6 +427,13 @@ class PageListViewportController with ChangeNotifier {
       _velocityStopwatch.reset();
     }
     _previousOrigin = _offsetAnimation!.value;
+
+    notifyListeners();
+  }
+
+  void _onOrientationAnimationEnd() {
+    _velocity = Offset.zero;
+    _velocityStopwatch.reset();
 
     notifyListeners();
   }
