@@ -394,26 +394,7 @@ class PageListViewportController with ChangeNotifier {
     _velocityStopwatch.reset();
     _offsetAnimation = Tween<Offset>(begin: _origin, end: destinationOffset).animate(
       CurvedAnimation(parent: _animationController, curve: curve),
-    )
-      ..addListener(() {
-        if (_velocityStopwatch.elapsedMilliseconds > 0) {
-          _velocity = (_offsetAnimation!.value - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
-          _velocityStopwatch.reset();
-        }
-        _previousOrigin = _offsetAnimation!.value;
-      })
-      ..addStatusListener((status) {
-        switch (status) {
-          case AnimationStatus.dismissed:
-          case AnimationStatus.completed:
-            _velocity = Offset.zero;
-            break;
-          case AnimationStatus.forward:
-          case AnimationStatus.reverse:
-            // Don't care.
-            break;
-        }
-      });
+    );
 
     _scaleAnimation = Tween<double>(begin: scale, end: desiredZoomLevel).animate(
       CurvedAnimation(parent: _animationController, curve: curve),
@@ -429,6 +410,13 @@ class PageListViewportController with ChangeNotifier {
   void _onOrientationAnimationChange() {
     _origin = _offsetAnimation!.value;
     _scale = _scaleAnimation!.value;
+
+    if (_velocityStopwatch.elapsedMilliseconds > 0) {
+      _velocity = (_offsetAnimation!.value - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
+      _velocityStopwatch.reset();
+    }
+    _previousOrigin = _offsetAnimation!.value;
+
     notifyListeners();
   }
 
