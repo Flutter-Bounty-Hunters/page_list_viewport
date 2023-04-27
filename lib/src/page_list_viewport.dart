@@ -297,6 +297,8 @@ class PageListViewportController extends OrientationController {
   @override
   @protected
   void onViewportLayout() {
+    disableNotifications();
+
     final minimumScaleToFillViewport = _viewport!.size.width / _viewport!._naturalPageSize.width;
     minimumScale = minimumScaleToFillViewport;
 
@@ -325,6 +327,11 @@ class PageListViewportController extends OrientationController {
     } else {
       _origin = _constrainOriginToViewportBounds(_origin);
     }
+
+    enableNotifications(
+      notifyIfNotificationsWereBlocked: true,
+      notifyImmediately: false,
+    );
   }
 
   /// Immediately changes the viewport offset so that the page at the given [pageIndex] is positioned as close
@@ -614,19 +621,27 @@ abstract class OrientationController with ChangeNotifier {
 
   /// Allow this controller to [notifyListeners] again.
   ///
-  /// If [immediatelyNotifyIfNotificationsWereBlocked] is `true`, and any notifications
+  /// If [notifyIfNotificationsWereBlocked] is `true`, and any notifications
   /// were blocked while notifications were disabled, then [notifyListeners] is
-  /// immediately called.
+  /// called. If [notifyImmediately] is `true`, listeners will be notified
+  /// immediately, otherwise, listeners will be notified at the end of the frame.
   @protected
   void enableNotifications({
-    bool immediatelyNotifyIfNotificationsWereBlocked = true,
+    bool notifyIfNotificationsWereBlocked = true,
+    bool notifyImmediately = true,
   }) {
     _sendNotifications = true;
 
-    if (_didBlockNotifications) {
-      _didBlockNotifications = false;
-      notifyListeners();
+    if (_didBlockNotifications && notifyIfNotificationsWereBlocked) {
+      if (notifyImmediately) {
+        notifyListeners();
+      } else {
+        WidgetsBinding.instance.addPostFrameCallback((timeStamp) {
+          notifyListeners();
+        });
+      }
     }
+    _didBlockNotifications = false;
   }
 
   /// Don't allow this controller to [notifyListeners].
@@ -640,7 +655,7 @@ abstract class OrientationController with ChangeNotifier {
       return;
     }
 
-    notifyListeners();
+    super.notifyListeners();
   }
 }
 
@@ -664,7 +679,7 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void dispose() {
-    _controller?.removeListener(_onPanScrollOrZoom);
+    _controller?.removeListener(_onOrientationChange);
     _element = null;
     super.dispose();
   }
@@ -739,12 +754,12 @@ class RenderPageListViewport extends RenderBox {
       return;
     }
 
-    _controller?.removeListener(_onPanScrollOrZoom);
+    _controller?.removeListener(_onOrientationChange);
     _controller?.viewport = null;
 
     _controller = newController;
     _controller!.viewport = this;
-    _controller!.addListener(_onPanScrollOrZoom);
+    _controller!.addListener(_onOrientationChange);
 
     markNeedsLayout();
   }
@@ -781,7 +796,7 @@ class RenderPageListViewport extends RenderBox {
     });
   }
 
-  void _onPanScrollOrZoom() {
+  void _onOrientationChange() {
     markNeedsLayout();
 
     // When the viewport only translates (no scale), the children won't have their performLayout()
@@ -823,17 +838,11 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void performLayout() {
-    // We might re-orient the controller during layout, but we don't want it to send
-    // notifications to listeners, because we're a listener, and we'll mark ourselves as
-    // needing layout during layout. That will crash Flutter.
-    _controller!.disableNotifications();
-
     size = constraints.biggest;
     if (size.width == 0) {
       // Our content calculations depend on a non-zero width. If we have no width, there's
       // nothing to layout or paint anyway. Bail out now and avoid adding code to account
       // for zero width.
-      _controller!.enableNotifications();
       return;
     }
 
@@ -863,8 +872,6 @@ class RenderPageListViewport extends RenderBox {
       child.layout(BoxConstraints.tight(pageSize), parentUsesSize: true);
       PageListViewportLogs.pagesList.finest(" - child size: ${child.size}");
     });
-
-    _controller!.enableNotifications();
   }
 
   // This page list needs to build and layout any pages that should
