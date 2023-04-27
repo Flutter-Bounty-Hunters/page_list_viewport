@@ -5,8 +5,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
-import 'package:page_list_viewport/page_list_viewport.dart';
 import 'package:vector_math/vector_math_64.dart';
+
+import 'logging.dart';
 
 /// A viewport that displays [pageCount] pages of content, arranged in a vertical
 /// list, with a given [naturalPageSize].
