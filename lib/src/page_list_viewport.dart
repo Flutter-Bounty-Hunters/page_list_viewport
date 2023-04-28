@@ -267,7 +267,6 @@ class PageListViewportController extends OrientationController {
   }
 
   @override
-  @protected
   RenderPageListViewport? get viewport => _viewport;
 
   RenderPageListViewport? _viewport;
