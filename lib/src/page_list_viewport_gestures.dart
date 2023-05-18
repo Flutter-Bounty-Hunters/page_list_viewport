@@ -274,7 +274,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       return;
     }
 
-    final secondsFraction = elapsedTime.inMilliseconds / 1000;
+    final secondsFraction = elapsedTime.inMicroseconds / 1000000;
     final currentVelocity = _frictionSimulation!.dx(secondsFraction);
     final originBeforeDelta = widget.controller.origin;
     final newOrigin = _frictionSimulation!.x(secondsFraction);
