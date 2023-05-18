@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Image tiles (debug)" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/example/lib/pages_with_tiled_images/main_page_list_images_inspector.dart" />
+    <method v="2" />
+  </configuration>
+</component>
