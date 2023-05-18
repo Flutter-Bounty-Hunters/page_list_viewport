@@ -505,7 +505,7 @@ class PageListViewportController extends OrientationController {
 
     // Update velocity tracking.
     if (_velocityStopwatch.elapsedMilliseconds > 0) {
-      _velocity = (newOrigin - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
+      _velocity = (newOrigin - _previousOrigin) / (_velocityStopwatch.elapsedMicroseconds / 1000000);
       _velocityStopwatch.reset();
       _velocityResetTimer?.cancel();
 
