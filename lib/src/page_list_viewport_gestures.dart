@@ -136,7 +136,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    PageListViewportLogs.pagesList
+    PageListViewportLogs.pagesListGestures
         .finer("onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
     if (!_isPanning) {
       // The user is interacting with a stylus. We don't want to pan
@@ -445,11 +445,6 @@ class DeprecatedPanAndScaleVelocityTracker {
             " - the user just removed the final finger. Using launch velocity from previous gesture: $_launchVelocity");
         return;
       }
-    }
-
-    if (gestureDuration < const Duration(milliseconds: 40)) {
-      PageListViewportLogs.pagesListGestures.fine(" - this gesture was too short to count. Ignoring.");
-      return;
     }
 
     if (_previousGesturePointerCount! > 1) {
