@@ -2,7 +2,6 @@ import 'dart:math';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 
 import 'logging.dart';
@@ -81,20 +80,11 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   double? _startContentScale;
   Offset? _startOffset;
   int? _endTimeInMillis;
-  late Ticker _ticker;
-  PanningFrictionSimulation? _frictionSimulation;
 
   @override
   void initState() {
     super.initState();
     _panAndScaleVelocityTracker = DeprecatedPanAndScaleVelocityTracker(clock: widget.clock);
-    _ticker = createTicker(_onFrictionTick);
-  }
-
-  @override
-  void dispose() {
-    _ticker.dispose();
-    super.dispose();
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -253,45 +243,21 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     final velocity = _panAndScaleVelocityTracker.velocity;
     PageListViewportLogs.pagesListGestures.fine("Starting momentum with velocity: $velocity");
 
-    _frictionSimulation = PanningFrictionSimulation(
-      position: widget.controller.origin,
-      velocity: velocity,
+    final panningSimulation = BallisticPanningOrientationSimulation(
+      initialOrientation: AxisAlignedOrientation(
+        widget.controller.origin,
+        widget.controller.scale,
+      ),
+      panningSimulation: PanningFrictionSimulation(
+        position: widget.controller.origin,
+        velocity: velocity,
+      ),
     );
-
-    if (!_ticker.isTicking) {
-      _ticker.start();
-    }
+    widget.controller.driveWithSimulation(panningSimulation);
   }
 
   void _stopMomentum() {
-    if (_ticker.isTicking) {
-      _ticker.stop();
-    }
-  }
-
-  void _onFrictionTick(Duration elapsedTime) {
-    if (elapsedTime == Duration.zero) {
-      return;
-    }
-
-    final secondsFraction = elapsedTime.inMicroseconds / 1000000;
-    final currentVelocity = _frictionSimulation!.dx(secondsFraction);
-    final originBeforeDelta = widget.controller.origin;
-    final newOrigin = _frictionSimulation!.x(secondsFraction);
-    final translate = newOrigin - originBeforeDelta;
-
-    PageListViewportLogs.pagesListGestures.finest(
-        "Friction tick. Time: ${elapsedTime.inMilliseconds}ms. Velocity: $currentVelocity. Movement: $translate");
-
-    widget.controller.translate(translate);
-
-    PageListViewportLogs.pagesListGestures.finest("New origin: $newOrigin");
-
-    // If the viewport hit a wall, or if the simulations are done, stop
-    // ticking.
-    if (originBeforeDelta == widget.controller.origin || _frictionSimulation!.isDone(secondsFraction)) {
-      _ticker.stop();
-    }
+    widget.controller.stopSimulation();
   }
 
   @override
@@ -491,7 +457,7 @@ class DeprecatedPanAndScaleVelocityTracker {
       : null;
 }
 
-class PanningFrictionSimulation {
+class PanningFrictionSimulation implements PanningSimulation {
   // Dampening factors applied to each component of a [FrictionSimulation].
   // Larger values result in the [FrictionSimulation] to accelerate faster and approach
   // zero slower, giving the impression of the simulation being "more slippery".
@@ -542,6 +508,12 @@ class PanningFrictionSimulation {
   final Offset _velocity;
   late final ClampedSimulation _xSimulation;
   late final ClampedSimulation _ySimulation;
+
+  @override
+  Offset offsetAt(Duration time) {
+    final offset = x(time.inMicroseconds.toDouble() / 1e6);
+    return offset;
+  }
 
   Offset x(double time) {
     return Offset(

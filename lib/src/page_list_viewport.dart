@@ -4,6 +4,7 @@ import 'dart:developer';
 import 'dart:math' as math;
 
 import 'package:flutter/rendering.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
 import 'package:vector_math/vector_math_64.dart';
 
@@ -110,6 +111,7 @@ class PageListViewportController extends OrientationController {
     double minimumScale = 0.1,
     double maximumScale = double.infinity,
   })  : assert(pageIndex >= 0, "The initial page index must be >= 0"),
+        _tickerProvider = vsync,
         _initialPageIndex = pageIndex,
         _origin = Offset.zero,
         _previousOrigin = Offset.zero,
@@ -129,7 +131,8 @@ class PageListViewportController extends OrientationController {
     double scale = 1.0,
     double minimumScale = 0.1,
     double maximumScale = double.infinity,
-  })  : _origin = origin,
+  })  : _tickerProvider = vsync,
+        _origin = origin,
         _previousOrigin = origin,
         _velocityStopwatch = Stopwatch(),
         _scale = scale,
@@ -170,6 +173,8 @@ class PageListViewportController extends OrientationController {
     super.dispose();
   }
 
+  final TickerProvider _tickerProvider;
+
   late final AnimationController _animationController;
   Animation? _offsetAnimation;
   Animation? _scaleAnimation;
@@ -200,6 +205,7 @@ class PageListViewportController extends OrientationController {
     // Stop any on-going orientation animation so that the origin stays at
     // the new offset.
     _animationController.stop();
+    stopSimulation();
 
     _origin = newOrigin;
     notifyListeners();
@@ -211,6 +217,9 @@ class PageListViewportController extends OrientationController {
   final Stopwatch _velocityStopwatch;
   Timer? _velocityResetTimer; // resets the velocity to zero if we haven't received a translation recently
 
+  Offset get acceleration => _acceleration;
+  Offset _acceleration = Offset.zero;
+
   /// The scale of the content in the viewport.
   @override
   double get scale => _scale;
@@ -220,6 +229,9 @@ class PageListViewportController extends OrientationController {
     if (newScale == _scale) {
       return;
     }
+
+    // An external source has changed the scale. Stop any ongoing orientation simulation.
+    stopSimulation();
 
     _scale = newScale;
     notifyListeners();
@@ -288,11 +300,17 @@ class PageListViewportController extends OrientationController {
 
     // Stop any on-going orientation animation because we received a new viewport.
     _animationController.stop();
+    stopSimulation();
   }
 
   Size? get _viewportSize => _viewport?.size;
 
   bool _isFirstLayoutForController = true;
+
+  OrientationSimulation? _activeSimulation;
+  Ticker? _simulationTicker;
+  Duration? _previousSimulationTime;
+  AxisAlignedOrientation? _previousSimulationOrientation;
 
   @override
   @protected
@@ -347,6 +365,7 @@ class PageListViewportController extends OrientationController {
 
     // Stop any on-going orientation animation so that we can jump to the desired page.
     _animationController.stop();
+    stopSimulation();
 
     _origin = _getPageOffset(pageIndex, zoomLevel);
     _velocity = Offset.zero;
@@ -378,6 +397,7 @@ class PageListViewportController extends OrientationController {
 
     // Stop any on-going orientation animation so that we can jump to the desired page.
     _animationController.stop();
+    stopSimulation();
 
     final desiredZoomLevel = zoomLevel ?? scale;
     final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
@@ -415,6 +435,10 @@ class PageListViewportController extends OrientationController {
       return Future.value();
     }
 
+    // We want to animate to a page, which means we don't want to continue with any
+    // on-going orientation simulations.
+    stopSimulation();
+
     final centerOfPage = _viewport!.calculatePageSize(1.0).center(Offset.zero);
     return animateToOffsetInPage(pageIndex, centerOfPage, duration);
   }
@@ -444,6 +468,7 @@ class PageListViewportController extends OrientationController {
 
     // Stop any on-going orientation animation so that we can jump to the desired page.
     _animationController.stop();
+    stopSimulation();
 
     final desiredZoomLevel = zoomLevel ?? scale;
     final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
@@ -498,6 +523,10 @@ class PageListViewportController extends OrientationController {
     PageListViewportLogs.pagesListController
         .fine("Viewport size: ${_viewport!.size}, scaled page width: ${_viewport!.calculatePageWidth(scale)}");
 
+    // Stop any on-going orientation animation so that we can translate from the current orientation.
+    _animationController.stop();
+    stopSimulation();
+
     final newOrigin = _constrainOriginToViewportBounds(desiredOrigin);
 
     _previousOrigin = _origin;
@@ -506,6 +535,7 @@ class PageListViewportController extends OrientationController {
     // Update velocity tracking.
     if (_velocityStopwatch.elapsedMilliseconds > 0) {
       _velocity = (newOrigin - _previousOrigin) / (_velocityStopwatch.elapsedMicroseconds / 1000000);
+
       _velocityStopwatch.reset();
       _velocityResetTimer?.cancel();
 
@@ -527,6 +557,11 @@ class PageListViewportController extends OrientationController {
     assert(newScale > 0.0);
     PageListViewportLogs.pagesListController
         .fine("Scale requested with desired scale: $newScale, min scale: $_minimumScale");
+
+    // Stop any on-going orientation animation so that we honor the desired scale.
+    _animationController.stop();
+    stopSimulation();
+
     newScale = newScale.clamp(_minimumScale, maximumScale);
 
     final scaleDiff = newScale / _scale;
@@ -550,6 +585,71 @@ class PageListViewportController extends OrientationController {
     _origin = _constrainOriginToViewportBounds(_origin);
 
     notifyListeners();
+  }
+
+  /// The given [simulation] takes control of the orientation of the content associated
+  /// with this controller.
+  ///
+  /// Any manual adjustment of the orientation will cause this simulation to immediately
+  /// cease controlling the orientation.
+  void driveWithSimulation(OrientationSimulation simulation) {
+    if (_activeSimulation != null) {
+      stopSimulation();
+    }
+
+    _activeSimulation = simulation;
+    _previousSimulationTime = Duration.zero;
+    _previousSimulationOrientation = AxisAlignedOrientation(_origin, _scale);
+    _simulationTicker ??= _tickerProvider.createTicker(_onSimulationTick);
+
+    _simulationTicker!.start();
+  }
+
+  void _onSimulationTick(Duration elapsedTime) {
+    if (_activeSimulation == null) {
+      return;
+    }
+    if (elapsedTime == Duration.zero) {
+      return;
+    }
+
+    // Calculate a new orientation based on the time that's passed.
+    final orientation = _activeSimulation!.orientationAt(elapsedTime);
+
+    // Update the velocity calculations.
+    final dt = elapsedTime - (_previousSimulationTime ?? Duration.zero);
+    final dtInSeconds = dt.inMicroseconds.toDouble() / 1e6;
+    final velocity = (orientation.origin - _previousSimulationOrientation!.origin) / dtInSeconds;
+    _acceleration = velocity - _velocity;
+    _velocity = velocity;
+    _scaleVelocity = (orientation.scale - _previousSimulationOrientation!.scale) / dtInSeconds;
+
+    // Update the content origin and scale.
+    _scale = orientation.scale;
+    _previousOrigin = _origin;
+    _origin = _constrainOriginToViewportBounds(orientation.origin);
+
+    // Check if the simulation is close enough to complete for us to stop it.
+    if ((_origin - _previousOrigin).distance.abs() < 0.01) {
+      stopSimulation();
+    }
+
+    // Update our previous-frame accounting, for the next simulation frame.
+    _previousSimulationTime = elapsedTime;
+    _previousSimulationOrientation = AxisAlignedOrientation(_origin, _scale);
+
+    notifyListeners();
+  }
+
+  /// Stops any on-going orientation simulation, started by [driveWithSimulation].
+  void stopSimulation() {
+    _activeSimulation = null;
+
+    _simulationTicker?.stop();
+    _simulationTicker = null;
+
+    _previousSimulationTime = null;
+    _previousSimulationOrientation = null;
   }
 
   Offset _constrainOriginToViewportBounds(Offset desiredOrigin) {
@@ -583,6 +683,42 @@ class PageListViewportController extends OrientationController {
 
     return Offset(originX, originY);
   }
+}
+
+abstract class OrientationSimulation {
+  AxisAlignedOrientation orientationAt(Duration time);
+}
+
+class AxisAlignedOrientation {
+  const AxisAlignedOrientation(this.origin, this.scale);
+
+  final Offset origin;
+  final double scale;
+}
+
+/// An [OrientationSimulation] that moves the viewport content based an initial
+/// velocity
+class BallisticPanningOrientationSimulation implements OrientationSimulation {
+  BallisticPanningOrientationSimulation({
+    required AxisAlignedOrientation initialOrientation,
+    required PanningSimulation panningSimulation,
+  })  : _initialOrientation = initialOrientation,
+        _panningSimulation = panningSimulation;
+
+  final AxisAlignedOrientation _initialOrientation;
+  final PanningSimulation _panningSimulation;
+
+  @override
+  AxisAlignedOrientation orientationAt(Duration time) {
+    return AxisAlignedOrientation(
+      _panningSimulation.offsetAt(time),
+      _initialOrientation.scale,
+    );
+  }
+}
+
+abstract class PanningSimulation {
+  Offset offsetAt(Duration time);
 }
 
 abstract class OrientationController with ChangeNotifier {
