@@ -1,0 +1,6 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Minimal Viewport (debug)" type="FlutterRunConfigurationType" factoryName="Flutter">
+    <option name="filePath" value="$PROJECT_DIR$/example/lib/main_minimal_viewport.dart" />
+    <method v="2" />
+  </configuration>
+</component>

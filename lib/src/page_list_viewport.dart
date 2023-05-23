@@ -632,6 +632,11 @@ class PageListViewportController extends OrientationController {
     // Check if the simulation is close enough to complete for us to stop it.
     if ((_origin - _previousOrigin).distance.abs() < 0.01) {
       stopSimulation();
+
+      // Ensure that we always report a zero velocity at the end of the simulation.
+      _acceleration = Offset.zero;
+      _velocity = Offset.zero;
+      _scaleVelocity = 0;
     }
 
     // Update our previous-frame accounting, for the next simulation frame.
