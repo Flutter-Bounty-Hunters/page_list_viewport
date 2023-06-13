@@ -72,13 +72,13 @@ class PageListViewport extends RenderObjectWidget {
 
   @override
   RenderObjectElement createElement() {
-    PageListViewportLogs.pagesList.finest("Creating PageListViewport element");
+    PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport element");
     return PageListViewportElement(this);
   }
 
   @override
   RenderObject createRenderObject(BuildContext context) {
-    PageListViewportLogs.pagesList.finest("Creating PageListViewport render object");
+    PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport render object");
     return RenderPageListViewport(
       element: context as PageListViewportElement,
       controller: controller,
@@ -91,7 +91,7 @@ class PageListViewport extends RenderObjectWidget {
 
   @override
   void updateRenderObject(BuildContext context, RenderPageListViewport renderObject) {
-    PageListViewportLogs.pagesList.finest("Updating PageListViewport render object");
+    PageListViewportLogs.pagesList.finest(() => "Updating PageListViewport render object");
     renderObject //
       ..pageCount = pageCount
       ..naturalPageSize = naturalPageSize
@@ -516,12 +516,12 @@ class PageListViewportController extends OrientationController {
   }
 
   void translate(Offset deltaInScreenSpace) {
-    PageListViewportLogs.pagesListController.fine("Translation requested for delta: $deltaInScreenSpace");
+    PageListViewportLogs.pagesListController.fine(() => "Translation requested for delta: $deltaInScreenSpace");
     final desiredOrigin = _origin + deltaInScreenSpace;
-    PageListViewportLogs.pagesListController.fine(
+    PageListViewportLogs.pagesListController.fine(() =>
         "Origin before adjustment: $_origin. Content height: ${_viewport!.calculateContentHeight(scale)}, Scale: $scale");
     PageListViewportLogs.pagesListController
-        .fine("Viewport size: ${_viewport!.size}, scaled page width: ${_viewport!.calculatePageWidth(scale)}");
+        .fine(() => "Viewport size: ${_viewport!.size}, scaled page width: ${_viewport!.calculatePageWidth(scale)}");
 
     // Stop any on-going orientation animation so that we can translate from the current orientation.
     _animationController.stop();
@@ -556,7 +556,7 @@ class PageListViewportController extends OrientationController {
   void setScale(double newScale, Offset focalPointInViewport) {
     assert(newScale > 0.0);
     PageListViewportLogs.pagesListController
-        .fine("Scale requested with desired scale: $newScale, min scale: $_minimumScale");
+        .fine(() => "Scale requested with desired scale: $newScale, min scale: $_minimumScale");
 
     // Stop any on-going orientation animation so that we honor the desired scale.
     _animationController.stop();
@@ -575,7 +575,7 @@ class PageListViewportController extends OrientationController {
     _origin = focalPointInViewport + (focalPointToOrigin * scaleDiff);
 
     // Update our scale.
-    PageListViewportLogs.pagesListController.fine("Setting scale to $newScale");
+    PageListViewportLogs.pagesListController.fine(() => "Setting scale to $newScale");
     previousScale = _scale;
     _scale = newScale;
     _scaleVelocity = (_scale - previousScale) / (_scaleVelocityStopwatch.elapsedMilliseconds / 1000);
@@ -916,7 +916,7 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void attach(PipelineOwner owner) {
-    PageListViewportLogs.pagesList.finest("attach()'ing viewport render object to pipeline");
+    PageListViewportLogs.pagesList.finest(() => "attach()'ing viewport render object to pipeline");
     super.attach(owner);
 
     visitChildren((child) {
@@ -926,7 +926,7 @@ class RenderPageListViewport extends RenderBox {
 
   @override
   void detach() {
-    PageListViewportLogs.pagesList.finest("detach()'ing viewport render object from pipeline");
+    PageListViewportLogs.pagesList.finest(() => "detach()'ing viewport render object from pipeline");
     // IMPORTANT: we must detach ourselves before detaching our children.
     // This is a Flutter framework requirement.
     super.detach();
@@ -1009,9 +1009,9 @@ class RenderPageListViewport extends RenderBox {
         ..viewportSize = size
         ..pageIndex = pageIndex
         ..offset = _controller!.origin + (Offset(0, pageSize.height) * pageIndex.toDouble());
-      PageListViewportLogs.pagesList.finest("Laying out child (at $pageIndex): $child");
+      PageListViewportLogs.pagesList.finest(() => "Laying out child (at $pageIndex): $child");
       child.layout(BoxConstraints.tight(pageSize), parentUsesSize: true);
-      PageListViewportLogs.pagesList.finest(" - child size: ${child.size}");
+      PageListViewportLogs.pagesList.finest(() => " - child size: ${child.size}");
     });
   }
 
@@ -1100,7 +1100,7 @@ class RenderPageListViewport extends RenderBox {
     final firstPageToPaintIndex = _findFirstPaintedPageIndex();
     final lastPageToPaintIndex = _findLastPaintedPageIndex();
 
-    PageListViewportLogs.pagesList.finest("Painting children at scale: ${_controller!.scale}");
+    PageListViewportLogs.pagesList.finest(() => "Painting children at scale: ${_controller!.scale}");
 
     layer = context.pushClipRect(
       needsCompositing,
@@ -1159,7 +1159,7 @@ class RenderPageListViewport extends RenderBox {
         }
       },
     );
-    PageListViewportLogs.pagesList.finest("Done with viewport paint");
+    PageListViewportLogs.pagesList.finest(() => "Done with viewport paint");
   }
 
   // The transform in this method is used to map from global-to-local, and
@@ -1223,7 +1223,7 @@ class PageListViewportElement extends RenderObjectElement {
   // our children at the appropriate time.
   @override
   void update(RenderObjectWidget newWidget) {
-    PageListViewportLogs.pagesList.finest("update() on element");
+    PageListViewportLogs.pagesList.finest(() => "update() on element");
     super.update(newWidget);
 
     if (Widget.canUpdate(widget, newWidget)) {
@@ -1233,13 +1233,13 @@ class PageListViewportElement extends RenderObjectElement {
 
   @override
   Element? updateChild(Element? child, Widget? newWidget, Object? newSlot) {
-    PageListViewportLogs.pagesList.finest("updateChild(): $newWidget");
+    PageListViewportLogs.pagesList.finest(() => "updateChild(): $newWidget");
     return super.updateChild(child, newWidget, newSlot);
   }
 
   @override
   void performRebuild() {
-    PageListViewportLogs.pagesList.finest("performRebuild()");
+    PageListViewportLogs.pagesList.finest(() => "performRebuild()");
     super.performRebuild();
 
     // rebuild() is where typical RenderObjects add and remove children
@@ -1301,7 +1301,7 @@ class PageListViewportElement extends RenderObjectElement {
 
   @override
   void insertRenderObjectChild(RenderObject child, Object? slot) {
-    PageListViewportLogs.pagesList.finest("Viewport adopting render object child: $child");
+    PageListViewportLogs.pagesList.finest(() => "Viewport adopting render object child: $child");
     renderObject.adoptChild(child);
   }
 
@@ -1313,7 +1313,7 @@ class PageListViewportElement extends RenderObjectElement {
   @override
   void removeRenderObjectChild(RenderObject child, Object? slot) {
     PageListViewportLogs.pagesList
-        .finest("removeRenderObjectChild() - child: $child, slot: $slot, is attached? ${child.attached}");
+        .finest(() => "removeRenderObjectChild() - child: $child, slot: $slot, is attached? ${child.attached}");
     renderObject.dropChild(child);
   }
 }
@@ -1373,7 +1373,7 @@ class PanAndScaleVelocityTracker {
   int _lastScaleTime = 0;
 
   void onScaleStart(ScaleStartDetails details) {
-    PageListViewportLogs.pagesListGestures.fine(
+    PageListViewportLogs.pagesListGestures.fine(() =>
         "onScaleStart() - pointer count: ${details.pointerCount}, time since last gesture: ${_timeSinceLastGesture?.inMilliseconds}ms");
 
     if (_previousPointerCount == 0) {
@@ -1399,15 +1399,15 @@ class PanAndScaleVelocityTracker {
       //     panning instead of scaling.
       _currentGestureStartAction = PanAndScaleGestureAction.removeNonLastFinger;
     }
-    PageListViewportLogs.pagesListGestures.fine(" - start action: $_currentGestureStartAction");
+    PageListViewportLogs.pagesListGestures.fine(() => " - start action: $_currentGestureStartAction");
     _currentGestureStartTimeInMillis = _clock.millis;
 
     if (_timeSinceLastGesture != null && _timeSinceLastGesture! < const Duration(milliseconds: 30)) {
-      PageListViewportLogs.pagesListGestures.fine(
+      PageListViewportLogs.pagesListGestures.fine(() =>
           " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousPointerCount. Current pointer count: ${details.pointerCount}");
       _isPossibleGestureContinuation = true;
     } else {
-      PageListViewportLogs.pagesListGestures.fine(" - restarting velocity for new gesture");
+      PageListViewportLogs.pagesListGestures.fine(() => " - restarting velocity for new gesture");
       _isPossibleGestureContinuation = false;
       _previousGesturePointerCount = details.pointerCount;
       _launchVelocity = Offset.zero;
@@ -1419,11 +1419,11 @@ class PanAndScaleVelocityTracker {
   }
 
   void onScaleUpdate(ScaleUpdateDetails details) {
-    PageListViewportLogs.pagesListGestures.fine("Scale update: ${details.localFocalPoint}");
+    PageListViewportLogs.pagesListGestures.fine(() => "Scale update: ${details.localFocalPoint}");
 
     if (_isPossibleGestureContinuation) {
       if (_timeSinceStartOfGesture < const Duration(milliseconds: 24)) {
-        PageListViewportLogs.pagesListGestures.fine(" - this gesture is a continuation. Ignoring update.");
+        PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation. Ignoring update.");
         return;
       }
 
@@ -1431,13 +1431,13 @@ class PanAndScaleVelocityTracker {
       // an intermediate moment as the user adds or removes fingers. This gesture
       // is intentional, and we need to track its velocity.
       PageListViewportLogs.pagesListGestures
-          .fine(" - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
+          .fine(() => " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
       _currentGestureStartTimeInMillis = _clock.millis;
       _previousGesturePointerCount = details.pointerCount;
       _launchVelocity = Offset.zero;
       _lastScaleTime = _clock.millis;
       _recentVelocity.clear();
-      PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
+      PageListViewportLogs.pagesListGesturesVelocity.finer(() => "Clearing velocity history");
 
       _isPossibleGestureContinuation = false;
 
@@ -1451,7 +1451,7 @@ class PanAndScaleVelocityTracker {
 
     final velocitySlice =
         _VelocitySlice(translation: details.focalPointDelta, dtInMillis: _clock.millis - _lastScaleTime);
-    PageListViewportLogs.pagesListGesturesVelocity.finer(
+    PageListViewportLogs.pagesListGesturesVelocity.finer(() =>
         "Velocity: ${velocitySlice.pixelsPerSecond} pixels/second (focal delta: ${details.focalPointDelta}) (dt: ${velocitySlice.seconds})");
     _recentVelocity.add(velocitySlice);
     _lastScaleTime = _clock.millis;
@@ -1459,7 +1459,8 @@ class PanAndScaleVelocityTracker {
 
   void onScaleEnd(ScaleEndDetails details) {
     final gestureDuration = Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
-    PageListViewportLogs.pagesListGestures.fine("onScaleEnd() - gesture duration: ${gestureDuration.inMilliseconds}");
+    PageListViewportLogs.pagesListGestures
+        .fine(() => "onScaleEnd() - gesture duration: ${gestureDuration.inMilliseconds}");
 
     _previousGestureEndTimeInMillis = _clock.millis;
     _previousPointerCount = details.pointerCount;
@@ -1467,20 +1468,20 @@ class PanAndScaleVelocityTracker {
     _currentGestureStartTimeInMillis = null;
 
     if (_isPossibleGestureContinuation) {
-      PageListViewportLogs.pagesListGestures.fine(" - this gesture is a continuation of a previous gesture.");
+      PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation of a previous gesture.");
       if (details.pointerCount > 0) {
-        PageListViewportLogs.pagesListGestures.fine(
+        PageListViewportLogs.pagesListGestures.fine(() =>
             " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.");
         return;
       } else {
-        PageListViewportLogs.pagesListGestures.fine(
+        PageListViewportLogs.pagesListGestures.fine(() =>
             " - the user just removed the final finger. Using launch velocity from previous gesture: $_launchVelocity");
         return;
       }
     }
 
     if (gestureDuration < const Duration(milliseconds: 40)) {
-      PageListViewportLogs.pagesListGestures.fine(" - this gesture was too short to count. Ignoring.");
+      PageListViewportLogs.pagesListGestures.fine(() => " - this gesture was too short to count. Ignoring.");
       return;
     }
 
@@ -1490,34 +1491,34 @@ class PanAndScaleVelocityTracker {
       // If the panning continues long enough, then we'll use the panning
       // velocity for momentum.
       PageListViewportLogs.pagesListGestures
-          .fine(" - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
+          .fine(() => " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
       _launchVelocity = Offset.zero;
       _lastScaleTime = _clock.millis;
       _recentVelocity.clear();
-      PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
+      PageListViewportLogs.pagesListGesturesVelocity.finer(() => "Clearing velocity history");
       return;
     }
 
     if (details.pointerCount > 0) {
       PageListViewportLogs.pagesListGestures
-          .fine(" - the user removed a finger, but is still interacting. Storing velocity for later.");
+          .fine(() => " - the user removed a finger, but is still interacting. Storing velocity for later.");
       PageListViewportLogs.pagesListGestures
-          .fine(" - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}");
+          .fine(() => " - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}");
       return;
     }
 
     PageListViewportLogs.pagesListGesturesVelocity
-        .finer("Ending velocity: ${details.velocity.pixelsPerSecond} pixels per second");
+        .finer(() => "Ending velocity: ${details.velocity.pixelsPerSecond} pixels per second");
     // _launchVelocity = details.velocity.pixelsPerSecond;
     _launchVelocity = _recentVelocity
         .fold(_VelocitySlice.zero, (totalVelocity, velocitySlice) => totalVelocity + velocitySlice)
         .pixelsPerSecond;
     _recentVelocity.clear();
     PageListViewportLogs.pagesListGesturesVelocity
-        .finer("Average velocity (launch velocity): $_launchVelocity pixels per second");
-    PageListViewportLogs.pagesListGesturesVelocity.finer("Clearing velocity history");
+        .finer(() => "Average velocity (launch velocity): $_launchVelocity pixels per second");
+    PageListViewportLogs.pagesListGesturesVelocity.finer(() => "Clearing velocity history");
     PageListViewportLogs.pagesListGestures
-        .fine(" - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
+        .fine(() => " - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
   }
 
   Duration get _timeSinceStartOfGesture => Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);

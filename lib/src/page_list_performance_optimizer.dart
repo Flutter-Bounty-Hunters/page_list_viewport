@@ -73,7 +73,7 @@ class _PageListPerformanceOptimizerState extends State<PageListPerformanceOptimi
 
     if (!_optimizing) {
       _optimizing = true;
-      PageListViewportLogs.pagesListOptimizer.info('Entering GC "Low Latency Mode"');
+      PageListViewportLogs.pagesListOptimizer.info(() => 'Entering GC "Low Latency Mode"');
       SchedulerBinding.instance.requestPerformanceMode(DartPerformanceMode.latency);
     }
     _cancelTimer?.cancel();
@@ -83,7 +83,7 @@ class _PageListPerformanceOptimizerState extends State<PageListPerformanceOptimi
   void _stopOptimizing() {
     if (_optimizing) {
       _optimizing = false;
-      PageListViewportLogs.pagesListOptimizer.info('Exiting GC "Low Latency Mode" back to "Balanced Mode".');
+      PageListViewportLogs.pagesListOptimizer.info(() => 'Exiting GC "Low Latency Mode" back to "Balanced Mode".');
       SchedulerBinding.instance.requestPerformanceMode(DartPerformanceMode.balanced);
     }
   }
