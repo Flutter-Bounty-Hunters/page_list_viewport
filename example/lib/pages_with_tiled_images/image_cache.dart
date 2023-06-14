@@ -474,9 +474,14 @@ class DocumentPageTileImagePainter implements ImagePainter {
   Future<void> _paintImage(PageRegionRenderRequest request, TileIndex tileIndex) async {
     final imageCompleter = Completer<ui.Image>();
     final index = (tileIndex.col + tileIndex.row) % _imageAssets.length;
-    final imageStream = AssetImage(_imageAssets[index]).resolve(
+    final imageStream = ResizeImage(
+      AssetImage(_imageAssets[index]),
+      width: 1024,
+      height: 768,
+    ).resolve(
       const ImageConfiguration(),
     );
+
     final listener = ImageStreamListener((ImageInfo imageInfo, bool synchronousCall) {
       imageCompleter.complete(imageInfo.image);
     });
