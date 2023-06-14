@@ -476,6 +476,7 @@ class DocumentPageTileImagePainter implements ImagePainter {
     final index = (tileIndex.col + tileIndex.row) % _imageAssets.length;
     final imageStream = ResizeImage(
       AssetImage(_imageAssets[index]),
+      width: 400,
       policy: ResizeImagePolicy.fit,
     ).resolve(
       const ImageConfiguration(),
