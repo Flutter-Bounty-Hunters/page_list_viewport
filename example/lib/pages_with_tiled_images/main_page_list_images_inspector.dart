@@ -34,7 +34,7 @@ class PageListImagesInspectorDemo extends StatefulWidget {
 }
 
 class _PageListImagesInspectorDemoState extends State<PageListImagesInspectorDemo> with TickerProviderStateMixin {
-  static final _naturalPageSize = const Size(8.5, 11);
+  static final _naturalPageSize = const Size(8.5, 11) * 14.4;
 
   final _pageViewportKey = GlobalKey();
   late PageListViewportController _viewportController;
