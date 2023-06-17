@@ -18,6 +18,8 @@ class _InteractiveViewerDemo extends StatefulWidget {
 class _InteractiveViewerDemoState extends State<_InteractiveViewerDemo> with TickerProviderStateMixin {
   late final TransformationController _controller;
 
+  int _currentImageIndex = 0;
+
   @override
   void initState() {
     super.initState();
@@ -118,8 +120,11 @@ class _InteractiveViewerDemoState extends State<_InteractiveViewerDemo> with Tic
   }
 
   Widget _buildImageGrid() {
+    _currentImageIndex = 0;
+
     return Column(
       children: [
+        _buildImageRow(),
         _buildImageRow(),
         _buildImageRow(),
         _buildImageRow(),
@@ -133,14 +138,25 @@ class _InteractiveViewerDemoState extends State<_InteractiveViewerDemo> with Tic
         _buildImage(),
         _buildImage(),
         _buildImage(),
+        _buildImage(),
       ],
     );
   }
 
   Widget _buildImage() {
-    return Image.asset(
-      "assets/image-4_small.jpeg",
+    final image = SizedBox(
+      width: 400,
+      height: 500,
+      child: Image.asset(
+        _photos[_currentImageIndex],
+        fit: BoxFit.fill,
+      ),
     );
+
+    _currentImageIndex += 1;
+    _currentImageIndex %= _photos.length;
+
+    return image;
   }
 
   Widget _buildAnimationButtons() {
@@ -160,3 +176,12 @@ class _InteractiveViewerDemoState extends State<_InteractiveViewerDemo> with Tic
     );
   }
 }
+
+const _photos = [
+  "assets/image-4_small.jpeg",
+  "assets/image-5_small.jpeg",
+  "assets/image-8_small.jpeg",
+  "assets/image-9_small.jpeg",
+  "assets/image-12_small.jpeg",
+  "assets/image-13_small.jpeg",
+];
