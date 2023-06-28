@@ -16,6 +16,11 @@ class VelocityPlotter extends StatefulWidget {
 }
 
 class _VelocityPlotterState extends State<VelocityPlotter> {
+  // Lists of points that we collect so that we can print out all the points and play
+  // them back for bug reproductions.
+  final _velocityPointPlayback = <Offset>[];
+  final _accelerationPointPlayback = <Offset>[];
+
   final _velocityLogicalPoint = <Offset>[];
   final _velocityVisiblePoints = <Offset>[];
   final _accelerationLogicalPoints = <Offset>[];
@@ -56,10 +61,12 @@ class _VelocityPlotterState extends State<VelocityPlotter> {
     }
     final velocity = widget.controller.velocity;
     _velocityLogicalPoint.add(velocity);
+    _velocityPointPlayback.add(velocity);
     if (_lastVelocity != null) {
       // final acceleration = (velocity - _lastVelocity!) / (_stopwatch.elapsedMilliseconds / 1000);
       final acceleration = widget.controller.acceleration * 100;
       _accelerationLogicalPoints.add(acceleration);
+      _accelerationPointPlayback.add(acceleration);
     }
 
     // Increment sample count so that we cause a repaint in the CustomPainter
@@ -77,37 +84,55 @@ class _VelocityPlotterState extends State<VelocityPlotter> {
     _sampleCount.value = 0;
   }
 
+  // ignore: unused_element
+  void _printPointPlayback() {
+    print("Velocity points:");
+    print("const velocityPoints = [");
+    for (final point in _velocityPointPlayback) {
+      print("  Offset(${point.dx}, ${point.dy}),");
+    }
+    print("];");
+
+    print("");
+    print("");
+
+    print("Acceleration points:");
+    print("const accelerationPoints = [");
+    for (final point in _accelerationPointPlayback) {
+      print("  Offset(${point.dx}, ${point.dy}),");
+    }
+    print("];");
+  }
+
   @override
   Widget build(BuildContext context) {
-    return RepaintBoundary(
-      child: GestureDetector(
-        onDoubleTap: _clearPlot,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _PlotterPainter(
-                  logicalPoints: _accelerationLogicalPoints,
-                  visiblePoints: _accelerationVisiblePoints,
-                  max: widget.max,
-                  color: Colors.red.withOpacity(0.5),
-                  repaint: _sampleCount,
-                ),
+    return GestureDetector(
+      onDoubleTap: _clearPlot,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _PlotterPainter(
+                logicalPoints: _accelerationLogicalPoints,
+                visiblePoints: _accelerationVisiblePoints,
+                max: widget.max,
+                color: Colors.red.withOpacity(0.5),
+                repaint: _sampleCount,
               ),
             ),
-            Positioned.fill(
-              child: CustomPaint(
-                painter: _PlotterPainter(
-                  logicalPoints: _velocityLogicalPoint,
-                  visiblePoints: _velocityVisiblePoints,
-                  max: widget.max,
-                  color: Colors.greenAccent,
-                  repaint: _sampleCount,
-                ),
+          ),
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _PlotterPainter(
+                logicalPoints: _velocityLogicalPoint,
+                visiblePoints: _velocityVisiblePoints,
+                max: widget.max,
+                color: Colors.greenAccent,
+                repaint: _sampleCount,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
