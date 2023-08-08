@@ -1,11 +1,14 @@
 import 'dart:math';
 
 import 'package:flutter/gestures.dart';
-import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
 
 import 'logging.dart';
 import 'page_list_viewport.dart';
+
+// packages for the friction simulation and gesture denial
+import 'dart:collection';
+import 'dart:math' as math;
 
 /// Controls a [PageListViewportController] with scale gestures to pan and zoom the
 /// associated [PageListViewport].
@@ -48,10 +51,11 @@ class PageListViewportGestures extends StatefulWidget {
   /// Any pointers not defined within the set will be ignored.
   final Set<PointerDeviceKind> panAndZoomPointerDevices;
 
-  /// Whether the user should be locked into horizontal or vertical scrolling,
-  /// when the user pans roughly in those directions.
+  /// Whether the user should be locked into horizontal or vertical
+  /// scrolling, when the user pans roughly in those directions.
   ///
-  /// When the user drags near 45 degrees, the user retains full pan control.
+  /// When the user drags near 45 degrees, the user retains full pan
+  /// control.
   final bool lockPanAxis;
 
   /// Reports the time, so that the gesture system can track how much
@@ -119,15 +123,16 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     _panAndScaleVelocityTracker.onScaleStart(details);
 
     if ((timeSinceLastGesture == null || timeSinceLastGesture > const Duration(milliseconds: 30))) {
-      // We've started a new gesture after a reasonable period of time since the
-      // last gesture. Stop any momentum from the last gesture.
+      // We've started a new gesture after a reasonable period of time
+      // since the last gesture. Stop any momentum from the last
+      // gesture.
       _stopMomentum();
     }
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    PageListViewportLogs.pagesListGestures.finer(
-        () => "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
+    PageListViewportLogs.pagesListGestures.finer(() =>
+        "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
     if (!_isPanning) {
       // The user is interacting with a stylus. We don't want to pan
       // or scale with a stylus.
@@ -140,9 +145,9 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       PageListViewportLogs.pagesListGestures.finer(() => " - origin: ${widget.controller.origin}");
       PageListViewportLogs.pagesListGestures.finer(() => " - scale: ${widget.controller.scale}");
       _isPanning = false;
-      // When this condition is triggered, _startOffset and _startContentScale
-      // should be non-null. But sometimes they are null. I don't know why. When that
-      // happens, return.
+      // When this condition is triggered, _startOffset and
+      // _startContentScale should be non-null. But sometimes they are
+      // null. I don't know why. When that happens, return.
       if (_startOffset == null || _startContentScale == null) {
         return;
       }
@@ -178,9 +183,13 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       return;
     }
 
-    if (translation.distance < 0.000001) {
-      // This means a distance of zero. We can't make a decision with zero translation.
-      // Fizzle and wait for the next panning notification.
+    if (translation.distance < KViewportScaleThresholds.minAxisLockingTranslationDistance) {
+      // The translation distance is not sufficiently large to be
+      // considered. Small translations should cause panning. This also
+      // partially filters out the artifacts of screen calibration,
+      // which are characterized by random direction of
+      // translation and small distance. Fizzle and wait for the next
+      // panning notification.
       return;
     }
 
@@ -198,10 +207,14 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     // Choose to lock in a particular axis direction, or not.
     final movementAngle = translation.direction;
     final movementAnglePositive = movementAngle.abs();
-    if (((2 / 6) * pi < movementAnglePositive) && (movementAnglePositive < (4 / 6) * pi)) {
+    // only consider axis locking if the translation distance is sufficiently large
+    // this is FPS dependent, so 2 should be dewpendent on fps
+    if ((pi / 2 - KViewportScaleThresholds.verticalAxisLockAngle < movementAnglePositive) &&
+        (movementAnglePositive < pi / 2 + KViewportScaleThresholds.verticalAxisLockAngle)) {
       PageListViewportLogs.pagesListGestures.finer(() => "Locking panning into vertical-only movement.");
       _isLockedVertical = true;
-    } else if (movementAnglePositive < (1 / 6) * pi || movementAnglePositive > (5 / 6) * pi) {
+    } else if (movementAnglePositive < KViewportScaleThresholds.horizontalAxisLockAngle ||
+        movementAnglePositive > pi - KViewportScaleThresholds.horizontalAxisLockAngle) {
       PageListViewportLogs.pagesListGestures.finer(() => "Locking panning into horizontal-only movement.");
       _isLockedHorizontal = true;
     }
@@ -238,10 +251,12 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
   }
 
-  Duration get _timeSinceEndOfLastGesture => Duration(milliseconds: widget.clock.millis - _endTimeInMillis!);
+  Duration get _timeSinceEndOfLastGesture =>
+      Duration(milliseconds: widget.clock.millis - _endTimeInMillis!);
   void _startMomentum() {
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum...");
     final velocity = _panAndScaleVelocityTracker.velocity;
+    final momentumSimInitialVelocitySclar = _panAndScaleVelocityTracker.momentumSimInitialVelocitySclar;
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum with velocity: $velocity");
 
     final panningSimulation = BallisticPanningOrientationSimulation(
@@ -252,6 +267,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       panningSimulation: PanningFrictionSimulation(
         position: widget.controller.origin,
         velocity: velocity,
+        momentumSimInitialVelocitySclar: momentumSimInitialVelocitySclar,
       ),
     );
     widget.controller.driveWithSimulation(panningSimulation);
@@ -288,17 +304,31 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   }
 }
 
-class DeprecatedPanAndScaleVelocityTracker {
-  /// The maximum velocity a gesture can have and still be considered a viewport
-  /// re-adjustment. Used in tandem with the [kViewportReAdjustmentMinTranslationDistance]
-  /// to determine if the user is re-adjusting the viewport. Viewport re-adjustments
-  /// result in the momentum simulation to be aborted.
-  static double kViewportReAdjustmentMaxVelocity = 600;
+// statically defined class with double constant values which parametrize
+// charateristic translation distances and velocities
+// distances are tiny | small | large
+// speeds are slow | normal | fast
+class KViewportScaleThresholds {
+  static const double tinyDistanceMax = 20.0;
+  static const double smallDistanceMax = 120.0;
+  static const double slowSpeedMax = 360.0;
+  static const double normalSpeedMax = 850.0;
+  static const double smallTranslationSlowSpeedScalar = 0.35;
+  static const double smallTranslationNormSpeedScalar = 0.6;
+  static const double largeTranslationNormSpeedScalar = 0.3;
+  static const double diagLaunchSpeedScalar = 0.7;
+  // Minimal translation distance for a gesture to be considered for
+  // axis locking
+  // Note that this depends on the rate at which the gestures are sampled.
+  static const double minAxisLockingTranslationDistance = 2.0;
 
-  /// The minimum distance the viewport must be translated such that the
-  /// gesture is considered a viewport re-adjustment which results in the
-  /// momentum simulation to be aborted.
-  static double kViewportReAdjustmentMinTranslationDistance = 60;
+  // Angles for a gesture to be axis locked
+  static const double verticalAxisLockAngle = pi / 4;
+  static const double horizontalAxisLockAngle = pi / 12;
+}
+
+class DeprecatedPanAndScaleVelocityTracker {
+  final _lastPositions = ListQueue<Offset>();
 
   DeprecatedPanAndScaleVelocityTracker({
     required Clock clock,
@@ -308,13 +338,23 @@ class DeprecatedPanAndScaleVelocityTracker {
 
   int _previousPointerCount = 0;
   int? _previousGestureEndTimeInMillis;
-  int? _previousGesturePointerCount;
 
   int? _currentGestureStartTimeInMillis;
   PanAndScaleGestureAction? _currentGestureStartAction;
   bool _isPossibleGestureContinuation = false;
 
+  // Variables needed to keep track of repeated input scroll acceleration
+  // Consider the swipe for for repeated input acceleration
+  bool _isPossibleAccelSwipe = false;
+  bool _previosLaunchedWithMomentum = true;
+  int _numberOfRepeatedAcceleratedSwipes = 0;
+  final int _maxTimeIntervalBtwRepeatedSwipes = 1000;
+  double _momentumSimInitialVelocityScalar = 1.0;
+  Offset _prevLaunchVelocity = Offset.zero;
+
   Offset get velocity => _launchVelocity;
+  // Initial scalar multiplying velocity in the momentum simulation
+  double get momentumSimInitialVelocitySclar => _momentumSimInitialVelocityScalar;
   Offset _launchVelocity = Offset.zero;
 
   /// The focal point when the gesture started.
@@ -357,39 +397,76 @@ class DeprecatedPanAndScaleVelocityTracker {
       PageListViewportLogs.pagesListGestures.fine(() =>
           " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousPointerCount. Current pointer count: ${details.pointerCount}");
       _isPossibleGestureContinuation = true;
+    } else if (_timeSinceLastGesture != null &&
+        _timeSinceLastGesture! < Duration(milliseconds: _maxTimeIntervalBtwRepeatedSwipes)) {
+      // if the gesture is not a continued gesture, analyze if it can
+      // be a repeated accelerated swipe
+
+      // if the previous gesture was a swipe and it was in the y
+      // direction only, mark the gesture as potentially a repeated
+      // acceleration swipe
+      if (_previosLaunchedWithMomentum &&
+          // ignore scales
+          details.pointerCount == 1 &&
+          !(_launchVelocity.dx.abs() > 0) &&
+          _launchVelocity != Offset.zero) {
+        _isPossibleAccelSwipe = true;
+        _prevLaunchVelocity = _launchVelocity;
+      }
     } else {
       PageListViewportLogs.pagesListGestures.fine(() => " - restarting velocity for new gesture");
       _isPossibleGestureContinuation = false;
-      _previousGesturePointerCount = details.pointerCount;
+      _isPossibleAccelSwipe = false;
       _launchVelocity = Offset.zero;
     }
 
     _previousPointerCount = details.pointerCount;
     _startFocalPosition = details.localFocalPoint;
+
+    // reinitialize the last position tracker every new gesture
+    _lastPositions.clear();
+    _lastPositions.addFirst(_startFocalPosition);
   }
 
   void onScaleUpdate(Offset localFocalPoint, int pointerCount) {
+    // update the queue tracking last positions
+    if (_lastPositions.length > 3) {
+      _lastPositions.removeFirst();
+    }
+    _lastPositions.addLast(localFocalPoint);
+
     PageListViewportLogs.pagesListGestures.fine(() => "Scale update: $localFocalPoint");
 
     if (_isPossibleGestureContinuation) {
       if (_timeSinceStartOfGesture < const Duration(milliseconds: 24)) {
-        PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation. Ignoring update.");
+        PageListViewportLogs.pagesListGestures
+            .fine(() => " - this gesture is a continuation. Ignoring update.");
         return;
       }
 
       // Enough time has passed for us to conclude that this gesture isn't just
       // an intermediate moment as the user adds or removes fingers. This gesture
       // is intentional, and we need to track its velocity.
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
+      PageListViewportLogs.pagesListGestures.fine(() =>
+          " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
       _currentGestureStartTimeInMillis = _clock.millis;
-      _previousGesturePointerCount = pointerCount;
       _launchVelocity = Offset.zero;
 
       _isPossibleGestureContinuation = false;
     }
 
     _lastFocalPosition = localFocalPoint;
+  }
+
+  // Reset the variables tracking accelerated repeated swiping gestures.
+  // Should be called after panning velocityTracker decides to return
+  // and not not launch a momentum simulation.
+  void _resetRepeatedAccelerationTracking() {
+    _previosLaunchedWithMomentum = false;
+    _momentumSimInitialVelocityScalar = 1;
+    _numberOfRepeatedAcceleratedSwipes = 0;
+    _isPossibleAccelSwipe = false;
+    _launchVelocity = Offset.zero;
   }
 
   void onScaleEnd(Offset velocity, int pointerCount) {
@@ -403,7 +480,8 @@ class DeprecatedPanAndScaleVelocityTracker {
     _currentGestureStartTimeInMillis = null;
 
     if (_isPossibleGestureContinuation) {
-      PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation of a previous gesture.");
+      PageListViewportLogs.pagesListGestures
+          .fine(() => " - this gesture is a continuation of a previous gesture.");
       if (pointerCount > 0) {
         PageListViewportLogs.pagesListGestures.fine(() =>
             " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.");
@@ -415,43 +493,122 @@ class DeprecatedPanAndScaleVelocityTracker {
       }
     }
 
-    if (_previousGesturePointerCount! > 1) {
+    if (_previousPointerCount > 1) {
       // The user was scaling. Now the user is panning. We don't want scale
       // gestures to contribute momentum, so we set the launch velocity to zero.
       // If the panning continues long enough, then we'll use the panning
       // velocity for momentum.
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
+      PageListViewportLogs.pagesListGestures.fine(() =>
+          " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
       _launchVelocity = Offset.zero;
       return;
     }
 
     final translationDistance = (_lastFocalPosition - _startFocalPosition).distance;
-    if (translationDistance > kViewportReAdjustmentMinTranslationDistance &&
-        velocity.distance < kViewportReAdjustmentMaxVelocity) {
-      // The user was readjusting the viewport by dragging it to the
-      // new position.
+    final velocityDistance = velocity.distance;
+
+    // judge the swiping gesture based on the length of the translation
+    // and the velocity and either end it at pannign by setting the
+    // accelerated scroll tracking settings and returning OR proceed to
+    // initializing a momentum simulation
+    if (translationDistance < KViewportScaleThresholds.tinyDistanceMax) {
+      // prevent momentum simulation for tiny scrolls
+      _resetRepeatedAccelerationTracking();
       return;
+    } else if (translationDistance < KViewportScaleThresholds.smallDistanceMax) {
+      // medium translation, depending on the speed decide whether to simulate momentum
+      if (velocityDistance > KViewportScaleThresholds.normalSpeedMax) {
+        // small translation, fast speed
+        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationSlowSpeedScalar;
+      } else if (velocityDistance > KViewportScaleThresholds.slowSpeedMax) {
+        // small translation, normal speed
+        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationNormSpeedScalar;
+      } else {
+        // small translation, slow speed
+        _resetRepeatedAccelerationTracking();
+        return;
+      }
+    } else {
+      // large translation distance
+      if (velocityDistance > KViewportScaleThresholds.normalSpeedMax) {
+        // large translation, fast speed
+      } else if (velocityDistance > KViewportScaleThresholds.slowSpeedMax) {
+        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.largeTranslationNormSpeedScalar;
+        // large translation, normal speed
+      } else {
+        // large translation, slow speed
+        _resetRepeatedAccelerationTracking();
+        return;
+      }
+    }
+
+    // Spaghetti code which blocks the issue when the uncalibrated touch
+    // sensor gives attributes to the gestures which end at a finger
+    // halt.
+    // The gesture is blocked if the flutter-reported velocity is
+    // in another direction to what we track based on the buffer of last
+    // positions.
+    if (_lastPositions.length >= KViewportScaleThresholds.minAxisLockingTranslationDistance) {
+      // we need to have at least one translation to compare to
+      Offset oldTranslationVector = _lastPositions.elementAt(1) - _lastPositions.first;
+      double scalarProduct = oldTranslationVector.dx * velocity.dx + oldTranslationVector.dy * velocity.dy;
+      if (scalarProduct <= 0) {
+        _resetRepeatedAccelerationTracking();
+        return;
+      }
+    } else {
+      // This gesture was short and we are not going to consider it for repeated acceleration
+      _resetRepeatedAccelerationTracking();
     }
 
     if (pointerCount > 0) {
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - the user removed a finger, but is still interacting. Storing velocity for later.");
+      PageListViewportLogs.pagesListGestures.fine(
+          () => " - the user removed a finger, but is still interacting. Storing velocity for later.");
       PageListViewportLogs.pagesListGestures
           .fine(() => " - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}");
       return;
     }
 
+    // Check that the two swipes consequtively considered for repeated
+    // swiping acceleration are collinear
+    if (_isPossibleAccelSwipe && !(_prevLaunchVelocity.dy * velocity.dy).isNegative) {
+      // Proceed to increase the momentum simulation initial boost to
+      // scroll faster
+      _numberOfRepeatedAcceleratedSwipes++;
+      _momentumSimInitialVelocityScalar = repeatedSwipeVelocityScalar(_numberOfRepeatedAcceleratedSwipes);
+    } else {
+      _momentumSimInitialVelocityScalar = 1;
+      _numberOfRepeatedAcceleratedSwipes = 0;
+    }
+
     _launchVelocity = velocity;
+    // Updating a repeated swipe tracking parameter
+    if (_launchVelocity.distance > 0) {
+      _previosLaunchedWithMomentum = true;
+    }
+
     PageListViewportLogs.pagesListGestures
         .fine(() => " - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
   }
 
-  Duration get _timeSinceStartOfGesture => Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
+  Duration get _timeSinceStartOfGesture =>
+      Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
 
   Duration? get _timeSinceLastGesture => _previousGestureEndTimeInMillis != null
       ? Duration(milliseconds: _clock.millis - _previousGestureEndTimeInMillis!)
       : null;
+}
+
+double repeatedSwipeVelocityScalar(int numberOfRepeatedAcceleratedSwipes) {
+  // The function takes the number of the repeated swipe considered in the repeated swipe acceleration sequence and as return gives the initial velocity scalar.
+  // The model for acceleration due to repeated input assumes this
+  // model: kStartValue+\frac{kEndValue-kStartValue}{1+e^{-kK(x-kMidway)}}
+  const double kMidway = 7; // where the function takes it's intermediate value
+  const double kK = 0.6; // how quickly the transition happens
+  const double kStartValue = 1;
+  const double kEndValue = 21;
+  return kStartValue +
+      (kEndValue - kStartValue) / (1 + exp(-kK * (numberOfRepeatedAcceleratedSwipes - kMidway)));
 }
 
 class PanningFrictionSimulation implements PanningSimulation {
@@ -460,51 +617,40 @@ class PanningFrictionSimulation implements PanningSimulation {
   // zero slower, giving the impression of the simulation being "more slippery".
   // It was found through testing that other scroll systems seem to be use different dampening
   // factors for the vertical and horizontal components.
-  static const kVerticalDrag = 0.095;
-  static const kHorizontalDrag = 0.0425;
+  static const kNormalDrag = 250.0;
+  static const kDragHorizontal = 300.0;
+  static const kFriction = 20.0;
+  // Mass is a redundant parameter, the ratio of m/c, mass to drag is important! Don't change:
+  static const kMass = 100.0;
 
   PanningFrictionSimulation({
     required Offset position,
     required Offset velocity,
+    double momentumSimInitialVelocitySclar = 1,
   })  : _position = position,
-        _velocity = velocity {
-    // Clamping bounds enforces a maximum instantaneous velocity of the viewport
-    // and in turn, how long the simulation will run. Larger numbers slide for longer,
-    // smaller numbers end more quickly.
-    _xSimulation = ClampedSimulation(
-      FrictionSimulation(
-        kHorizontalDrag,
-        _position.dx,
-        _velocity.dx,
-        // Horizontal friction simulation uses the default constantDeceleration.
-        //
-        // constantDeceleration impacts how smoothly the simulation comes to a stop
-        // near the end (when it smoothly slides to zero).
-      ),
-      dxMin: -3000,
-      dxMax: 3000,
-    );
-    _ySimulation = ClampedSimulation(
-      FrictionSimulation(
-        kVerticalDrag,
-        _position.dy,
-        _velocity.dy,
-        // Vertical friction is intentionally different from horizontal friction,
-        // based on empirical results.
-        //
-        // constantDeceleration impacts how smoothly the simulation comes to a stop
-        // near the end (when it smoothly slides to zero).
-        constantDeceleration: 2.35,
-      ),
-      dxMin: -2000, // Scroll down more slowly than scrolling up. A config found in some other scrolling systems.
-      dxMax: 3000,
-    );
+        _velocity = velocity,
+        _momentumSimInitialVelocityScalar = momentumSimInitialVelocitySclar {
+    if (_velocity.dx.abs() > 0 && _velocity.dy.abs() > 0) {
+      // mixed direction simulation
+      _xSimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dx, _velocity.distance,
+          math.cos(math.atan2(_velocity.dy, _velocity.dx)),
+          initialSpeedScalar: KViewportScaleThresholds.diagLaunchSpeedScalar);
+      _ySimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dy, _velocity.distance,
+          math.sin(math.atan2(_velocity.dy, _velocity.dx)),
+          initialSpeedScalar: KViewportScaleThresholds.diagLaunchSpeedScalar);
+    } else {
+      _xSimulation = FrictionDragScalar(kFriction, kDragHorizontal, kMass, _position.dx, _velocity.dx, 1,
+          initialSpeedScalar: _momentumSimInitialVelocityScalar);
+      _ySimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dy, _velocity.dy, 1,
+          initialSpeedScalar: _momentumSimInitialVelocityScalar);
+    }
   }
 
   final Offset _position;
   final Offset _velocity;
-  late final ClampedSimulation _xSimulation;
-  late final ClampedSimulation _ySimulation;
+  final double _momentumSimInitialVelocityScalar;
+  late final Simulation _xSimulation;
+  late final Simulation _ySimulation;
 
   @override
   Offset offsetAt(Duration time) {
@@ -527,4 +673,76 @@ class PanningFrictionSimulation implements PanningSimulation {
   }
 
   bool isDone(double time) => _xSimulation.isDone(time) && _ySimulation.isDone(time);
+}
+
+class FrictionDragScalar extends Simulation {
+  FrictionDragScalar(
+      double friction, double drag, double mass, double position, double velocity, double scalar,
+      {super.tolerance, double initialSpeedScalar = 1, double maxScrollingVelocity = 100000})
+      : _c = drag,
+        _n = friction,
+        _m = mass,
+        _x = position,
+        _w = velocity.abs() * initialSpeedScalar,
+        _sign = velocity.sign,
+        _scalar = scalar {
+    _finalTime = _m * math.log(1 + _w * _c / (_m * _n)) / _c;
+    if (_w > maxScrollingVelocity) {
+      _w = maxScrollingVelocity;
+    }
+  }
+
+  final double _c; // fluid drag first order
+  final double _n; // static friction
+  final double _x; // initial position
+  final double _m; // mass
+  double _w; // absolute value of the initial velocity
+  final double _sign; // sign of the initial velocity
+  final double _scalar; // scalar, by which to multiply all the positional results
+  double _finalTime = double.infinity; // total time for the simulation, initialized upon build
+
+  @override
+  double x(double time) {
+    if (time > _finalTime) {
+      return finalX;
+    }
+    // Computes the position at time time:
+    // \frac{\left(k_{1}m\ e^{\frac{-c\ x}{m}}-m\ n\ x\right)}{c}+k_{2}
+    // where k_{1}=-\left(w+\frac{mn}{c}\right)
+    // and \frac{\left(w+\frac{mn}{c}\right)m}{c}
+    double p1 = -(_w + _m * _n / _c) * _m * math.pow(math.e, -_c * time / _m);
+    double p2 = -_m * _n * time;
+    double k2 = (_w + _m * _n / _c) * _m / _c;
+    late double posi;
+    posi = _x + (_sign * ((p1 - p2) / _c + k2)) * _scalar;
+
+    return posi;
+  }
+
+  @override
+  double dx(double time) {
+    // Not used, but required for a simulation object.
+    if (time > _finalTime) {
+      return 0;
+    }
+    // Computes velocity at time time:
+    // -k_{1}\ e^{-\frac{cx}{m}}-\frac{mn}{c}
+    // where k_{1}=-\left(w+\frac{mn}{c}\right)
+    double velo = ((_w + _m * _n / _c) * math.pow(math.e, -_c * time / _m) - _m * _n / _c);
+    //print("velo $velo at time $time");
+    if (_finalTime - time < 2) {
+      velo = velo / (_finalTime - time);
+    }
+    return velo * _scalar;
+  }
+
+  /// The value of [x] at the time when the simulation stops.
+  double get finalX {
+    return x(_finalTime);
+  }
+
+  @override
+  bool isDone(double time) {
+    return time < _finalTime;
+  }
 }
