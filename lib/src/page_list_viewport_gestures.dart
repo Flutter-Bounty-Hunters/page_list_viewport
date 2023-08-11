@@ -257,6 +257,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum...");
     final velocity = _panAndScaleVelocityTracker.velocity;
     final momentumSimInitialVelocitySclar = _panAndScaleVelocityTracker.momentumSimInitialVelocitySclar;
+    final dragIncreaseScalar = _panAndScaleVelocityTracker.dragIncreaseScalar;
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum with velocity: $velocity");
 
     final panningSimulation = BallisticPanningOrientationSimulation(
@@ -268,6 +269,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
         position: widget.controller.origin,
         velocity: velocity,
         momentumSimInitialVelocitySclar: momentumSimInitialVelocitySclar,
+        dragIncreaseScalar: dragIncreaseScalar,
       ),
     );
     widget.controller.driveWithSimulation(panningSimulation);
@@ -313,11 +315,14 @@ class KViewportScaleThresholds {
   static const double smallDistanceMax = 120.0;
   static const double slowSpeedMax = 300.0;
   static const double normalSpeedMax = 850.0;
+  static const double minSmallTranslationMomentumActivationSpeed = 150.0;
   static const double smallTranslationSlowSpeedScalar = 0.5;
   static const double smallTranslationNormSpeedScalar = 0.6;
+  static const double smallTranslationFastSpeedScalar = 0.7;
   static const double largeTranslationNormSpeedScalar = 0.85;
   static const double diagLaunchSpeedScalar = 0.7;
   static const double defaultSpeedScalar = 1.0;
+  static const double defaultDragIncreaseScalar = 1.0;
   // Minimal translation distance for a gesture to be considered for
   // axis locking
   // Note that this depends on the rate at which the gestures are sampled.
@@ -350,13 +355,16 @@ class DeprecatedPanAndScaleVelocityTracker {
   bool _previosLaunchedWithMomentum = true;
   int _numberOfRepeatedAcceleratedSwipes = 0;
   final int _maxTimeIntervalBtwRepeatedSwipes = 1000;
-  double _momentumSimInitialVelocityScalar = 1.0;
   Offset _prevLaunchVelocity = Offset.zero;
 
   Offset get velocity => _launchVelocity;
   // Initial scalar multiplying velocity in the momentum simulation
   double get momentumSimInitialVelocitySclar => _momentumSimInitialVelocityScalar;
+  double get dragIncreaseScalar => _dragIncreaseScalar;
   Offset _launchVelocity = Offset.zero;
+
+  double _momentumSimInitialVelocityScalar = 1.0;
+  double _dragIncreaseScalar = 1.0;
 
   /// The focal point when the gesture started.
   Offset _startFocalPosition = Offset.zero;
@@ -509,6 +517,7 @@ class DeprecatedPanAndScaleVelocityTracker {
 
     // set default initial scrolling velocity boost
     _momentumSimInitialVelocityScalar = KViewportScaleThresholds.defaultSpeedScalar;
+    _dragIncreaseScalar = KViewportScaleThresholds.defaultDragIncreaseScalar;
     // judge the swiping gesture based on the length of the translation
     // and the velocity and either end it at pannign by setting the
     // accelerated scroll tracking settings and returning OR proceed to
@@ -521,12 +530,15 @@ class DeprecatedPanAndScaleVelocityTracker {
       // medium translation, depending on the speed decide whether to simulate momentum
       if (velocityDistance > KViewportScaleThresholds.normalSpeedMax) {
         // small translation, fast speed
-        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationSlowSpeedScalar;
+        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationFastSpeedScalar;
       } else if (velocityDistance > KViewportScaleThresholds.slowSpeedMax) {
         // small translation, normal speed
         _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationNormSpeedScalar;
-      } else {
+      } else if (velocityDistance > KViewportScaleThresholds.minSmallTranslationMomentumActivationSpeed) {
         // small translation, slow speed
+        _momentumSimInitialVelocityScalar = KViewportScaleThresholds.smallTranslationSlowSpeedScalar;
+      } else {
+        // small translation, speed insufficient to launch a momentum simulation
         _resetRepeatedAccelerationTracking();
         return;
       }
@@ -581,6 +593,7 @@ class DeprecatedPanAndScaleVelocityTracker {
       // constants, don't override them for the first 3 swipes
       if (_numberOfRepeatedAcceleratedSwipes > 2) {
         _momentumSimInitialVelocityScalar = repeatedSwipeVelocityScalar(_numberOfRepeatedAcceleratedSwipes);
+        _dragIncreaseScalar = repeatedSwipeDragIncreaseScalar(_numberOfRepeatedAcceleratedSwipes);
       }
     } else {
       _resetRepeatedAccelerationTracking();
@@ -608,10 +621,22 @@ double repeatedSwipeVelocityScalar(int numberOfRepeatedAcceleratedSwipes) {
   // The function takes the number of the repeated swipe considered in the repeated swipe acceleration sequence and as return gives the initial velocity scalar.
   // The model for acceleration due to repeated input assumes this
   // model: kStartValue+\frac{kEndValue-kStartValue}{1+e^{-kK(x-kMidway)}}
-  const double kMidway = 7; // where the function takes it's intermediate value
-  const double kK = 0.6; // how quickly the transition happens
+  const double kMidway = 9; // where the function takes it's intermediate value
+  const double kK = 0.5; // how quickly the transition happens (smaller is slower)
   const double kStartValue = 1;
-  const double kEndValue = 21;
+  const double kEndValue = 14;
+  return kStartValue +
+      (kEndValue - kStartValue) / (1 + exp(-kK * (numberOfRepeatedAcceleratedSwipes - kMidway)));
+}
+
+double repeatedSwipeDragIncreaseScalar(int numberOfRepeatedAcceleratedSwipes) {
+  // The function takes the number of the repeated swipe considered in the repeated swipe acceleration sequence and as return gives the initial velocity scalar.
+  // The model for acceleration due to repeated input assumes this
+  // model: kStartValue+\frac{kEndValue-kStartValue}{1+e^{-kK(x-kMidway)}}
+  const double kMidway = 5; // where the function takes it's intermediate value
+  const double kK = 0.8; // how quickly the transition happens (smaller is slower)
+  const double kStartValue = 1;
+  const double kEndValue = 0.5;
   return kStartValue +
       (kEndValue - kStartValue) / (1 + exp(-kK * (numberOfRepeatedAcceleratedSwipes - kMidway)));
 }
@@ -631,29 +656,35 @@ class PanningFrictionSimulation implements PanningSimulation {
   PanningFrictionSimulation({
     required Offset position,
     required Offset velocity,
-    double momentumSimInitialVelocitySclar = 1,
+    double momentumSimInitialVelocitySclar = 1.0,
+    double dragIncreaseScalar = 1.0,
   })  : _position = position,
         _velocity = velocity,
-        _momentumSimInitialVelocityScalar = momentumSimInitialVelocitySclar {
+        _momentumSimInitialVelocityScalar = momentumSimInitialVelocitySclar,
+        _dragIncreaseScalar = dragIncreaseScalar {
     if (_velocity.dx.abs() > 0 && _velocity.dy.abs() > 0) {
       // mixed direction simulation
-      _xSimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dx, _velocity.distance,
-          math.cos(math.atan2(_velocity.dy, _velocity.dx)),
+      _xSimulation = FrictionDragScalar(kFriction, kNormalDrag * _dragIncreaseScalar, kMass, _position.dx,
+          _velocity.distance, math.cos(math.atan2(_velocity.dy, _velocity.dx)),
           initialSpeedScalar: KViewportScaleThresholds.diagLaunchSpeedScalar);
-      _ySimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dy, _velocity.distance,
-          math.sin(math.atan2(_velocity.dy, _velocity.dx)),
+      _ySimulation = FrictionDragScalar(kFriction, kNormalDrag * _dragIncreaseScalar, kMass, _position.dy,
+          _velocity.distance, math.sin(math.atan2(_velocity.dy, _velocity.dx)),
           initialSpeedScalar: KViewportScaleThresholds.diagLaunchSpeedScalar);
     } else {
-      _xSimulation = FrictionDragScalar(kFriction, kDragHorizontal, kMass, _position.dx, _velocity.dx, 1,
+      _xSimulation = FrictionDragScalar(
+          kFriction, kDragHorizontal * _dragIncreaseScalar, kMass, _position.dx, _velocity.dx, 1,
           initialSpeedScalar: _momentumSimInitialVelocityScalar);
-      _ySimulation = FrictionDragScalar(kFriction, kNormalDrag, kMass, _position.dy, _velocity.dy, 1,
+      _ySimulation = FrictionDragScalar(
+          kFriction, kNormalDrag * _dragIncreaseScalar, kMass, _position.dy, _velocity.dy, 1,
           initialSpeedScalar: _momentumSimInitialVelocityScalar);
     }
+    print(_dragIncreaseScalar);
   }
 
   final Offset _position;
   final Offset _velocity;
   final double _momentumSimInitialVelocityScalar;
+  final double _dragIncreaseScalar;
   late final Simulation _xSimulation;
   late final Simulation _ySimulation;
 
