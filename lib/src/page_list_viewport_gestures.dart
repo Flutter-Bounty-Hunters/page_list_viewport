@@ -311,11 +311,11 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 // distances are tiny | small | large
 // speeds are slow | normal | fast
 class KViewportScaleThresholds {
-  static const double tinyDistanceMax = 10.0;
+  static const double tinyDistanceMax = 5.0;
   static const double smallDistanceMax = 120.0;
   static const double slowSpeedMax = 300.0;
   static const double normalSpeedMax = 850.0;
-  static const double minSmallTranslationMomentumActivationSpeed = 150.0;
+  static const double minSmallTranslationMomentumActivationSpeed = 120.0;
   static const double smallTranslationSlowSpeedScalar = 0.5;
   static const double smallTranslationNormSpeedScalar = 0.6;
   static const double smallTranslationFastSpeedScalar = 0.7;
