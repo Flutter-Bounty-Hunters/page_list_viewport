@@ -309,14 +309,15 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 // distances are tiny | small | large
 // speeds are slow | normal | fast
 class KViewportScaleThresholds {
-  static const double tinyDistanceMax = 20.0;
+  static const double tinyDistanceMax = 10.0;
   static const double smallDistanceMax = 120.0;
-  static const double slowSpeedMax = 360.0;
+  static const double slowSpeedMax = 300.0;
   static const double normalSpeedMax = 850.0;
-  static const double smallTranslationSlowSpeedScalar = 0.35;
+  static const double smallTranslationSlowSpeedScalar = 0.5;
   static const double smallTranslationNormSpeedScalar = 0.6;
-  static const double largeTranslationNormSpeedScalar = 0.3;
+  static const double largeTranslationNormSpeedScalar = 0.85;
   static const double diagLaunchSpeedScalar = 0.7;
+  static const double defaultSpeedScalar = 1.0;
   // Minimal translation distance for a gesture to be considered for
   // axis locking
   // Note that this depends on the rate at which the gestures are sampled.
@@ -463,7 +464,6 @@ class DeprecatedPanAndScaleVelocityTracker {
   // and not not launch a momentum simulation.
   void _resetRepeatedAccelerationTracking() {
     _previosLaunchedWithMomentum = false;
-    _momentumSimInitialVelocityScalar = 1;
     _numberOfRepeatedAcceleratedSwipes = 0;
     _isPossibleAccelSwipe = false;
     _launchVelocity = Offset.zero;
@@ -507,6 +507,8 @@ class DeprecatedPanAndScaleVelocityTracker {
     final translationDistance = (_lastFocalPosition - _startFocalPosition).distance;
     final velocityDistance = velocity.distance;
 
+    // set default initial scrolling velocity boost
+    _momentumSimInitialVelocityScalar = KViewportScaleThresholds.defaultSpeedScalar;
     // judge the swiping gesture based on the length of the translation
     // and the velocity and either end it at pannign by setting the
     // accelerated scroll tracking settings and returning OR proceed to
@@ -571,14 +573,17 @@ class DeprecatedPanAndScaleVelocityTracker {
 
     // Check that the two swipes consequtively considered for repeated
     // swiping acceleration are collinear
-    if (_isPossibleAccelSwipe && !(_prevLaunchVelocity.dy * velocity.dy).isNegative) {
+    if (_isPossibleAccelSwipe && !((_prevLaunchVelocity.dy * velocity.dy).isNegative)) {
       // Proceed to increase the momentum simulation initial boost to
       // scroll faster
       _numberOfRepeatedAcceleratedSwipes++;
-      _momentumSimInitialVelocityScalar = repeatedSwipeVelocityScalar(_numberOfRepeatedAcceleratedSwipes);
+      // if the user makes tiny slow scrolls, which get deccelerated by
+      // constants, don't override them for the first 3 swipes
+      if (_numberOfRepeatedAcceleratedSwipes > 2) {
+        _momentumSimInitialVelocityScalar = repeatedSwipeVelocityScalar(_numberOfRepeatedAcceleratedSwipes);
+      }
     } else {
-      _momentumSimInitialVelocityScalar = 1;
-      _numberOfRepeatedAcceleratedSwipes = 0;
+      _resetRepeatedAccelerationTracking();
     }
 
     _launchVelocity = velocity;
@@ -729,7 +734,6 @@ class FrictionDragScalar extends Simulation {
     // -k_{1}\ e^{-\frac{cx}{m}}-\frac{mn}{c}
     // where k_{1}=-\left(w+\frac{mn}{c}\right)
     double velo = ((_w + _m * _n / _c) * math.pow(math.e, -_c * time / _m) - _m * _n / _c);
-    //print("velo $velo at time $time");
     if (_finalTime - time < 2) {
       velo = velo / (_finalTime - time);
     }
