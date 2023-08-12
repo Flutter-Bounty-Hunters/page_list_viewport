@@ -311,7 +311,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 // distances are tiny | small | large
 // speeds are slow | normal | fast
 class KViewportScaleThresholds {
-  static const double tinyDistanceMax = 5.0;
+  static const double tinyDistanceMax = 0.1;
   static const double smallDistanceMax = 120.0;
   static const double slowSpeedMax = 300.0;
   static const double normalSpeedMax = 850.0;
@@ -678,7 +678,6 @@ class PanningFrictionSimulation implements PanningSimulation {
           kFriction, kNormalDrag * _dragIncreaseScalar, kMass, _position.dy, _velocity.dy, 1,
           initialSpeedScalar: _momentumSimInitialVelocityScalar);
     }
-    print(_dragIncreaseScalar);
   }
 
   final Offset _position;
