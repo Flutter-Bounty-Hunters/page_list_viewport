@@ -51,11 +51,10 @@ class PageListViewportGestures extends StatefulWidget {
   /// Any pointers not defined within the set will be ignored.
   final Set<PointerDeviceKind> panAndZoomPointerDevices;
 
-  /// Whether the user should be locked into horizontal or vertical
-  /// scrolling, when the user pans roughly in those directions.
+  /// Whether the user should be locked into horizontal or vertical scrolling,
+  /// when the user pans roughly in those directions.
   ///
-  /// When the user drags near 45 degrees, the user retains full pan
-  /// control.
+  /// When the user drags near 45 degrees, the user retains full pan control.
   final bool lockPanAxis;
 
   /// Reports the time, so that the gesture system can track how much
@@ -123,16 +122,15 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     _panAndScaleVelocityTracker.onScaleStart(details);
 
     if ((timeSinceLastGesture == null || timeSinceLastGesture > const Duration(milliseconds: 30))) {
-      // We've started a new gesture after a reasonable period of time
-      // since the last gesture. Stop any momentum from the last
-      // gesture.
+      // We've started a new gesture after a reasonable period of time since the
+      // last gesture. Stop any momentum from the last gesture.
       _stopMomentum();
     }
   }
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
-    PageListViewportLogs.pagesListGestures.finer(() =>
-        "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
+    PageListViewportLogs.pagesListGestures.finer(
+        () => "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
     if (!_isPanning) {
       // The user is interacting with a stylus. We don't want to pan
       // or scale with a stylus.
@@ -145,9 +143,9 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       PageListViewportLogs.pagesListGestures.finer(() => " - origin: ${widget.controller.origin}");
       PageListViewportLogs.pagesListGestures.finer(() => " - scale: ${widget.controller.scale}");
       _isPanning = false;
-      // When this condition is triggered, _startOffset and
-      // _startContentScale should be non-null. But sometimes they are
-      // null. I don't know why. When that happens, return.
+      // When this condition is triggered, _startOffset and _startContentScale
+      // should be non-null. But sometimes they are null. I don't know why. When that
+      // happens, return.
       if (_startOffset == null || _startContentScale == null) {
         return;
       }
@@ -251,8 +249,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
   }
 
-  Duration get _timeSinceEndOfLastGesture =>
-      Duration(milliseconds: widget.clock.millis - _endTimeInMillis!);
+  Duration get _timeSinceEndOfLastGesture => Duration(milliseconds: widget.clock.millis - _endTimeInMillis!);
   void _startMomentum() {
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum...");
     final velocity = _panAndScaleVelocityTracker.velocity;
@@ -448,16 +445,15 @@ class DeprecatedPanAndScaleVelocityTracker {
 
     if (_isPossibleGestureContinuation) {
       if (_timeSinceStartOfGesture < const Duration(milliseconds: 24)) {
-        PageListViewportLogs.pagesListGestures
-            .fine(() => " - this gesture is a continuation. Ignoring update.");
+        PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation. Ignoring update.");
         return;
       }
 
       // Enough time has passed for us to conclude that this gesture isn't just
       // an intermediate moment as the user adds or removes fingers. This gesture
       // is intentional, and we need to track its velocity.
-      PageListViewportLogs.pagesListGestures.fine(() =>
-          " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
+      PageListViewportLogs.pagesListGestures
+          .fine(() => " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
       _currentGestureStartTimeInMillis = _clock.millis;
       _launchVelocity = Offset.zero;
 
@@ -488,8 +484,7 @@ class DeprecatedPanAndScaleVelocityTracker {
     _currentGestureStartTimeInMillis = null;
 
     if (_isPossibleGestureContinuation) {
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - this gesture is a continuation of a previous gesture.");
+      PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation of a previous gesture.");
       if (pointerCount > 0) {
         PageListViewportLogs.pagesListGestures.fine(() =>
             " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.");
@@ -506,8 +501,8 @@ class DeprecatedPanAndScaleVelocityTracker {
       // gestures to contribute momentum, so we set the launch velocity to zero.
       // If the panning continues long enough, then we'll use the panning
       // velocity for momentum.
-      PageListViewportLogs.pagesListGestures.fine(() =>
-          " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
+      PageListViewportLogs.pagesListGestures
+          .fine(() => " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
       _launchVelocity = Offset.zero;
       return;
     }
@@ -576,8 +571,8 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     if (pointerCount > 0) {
-      PageListViewportLogs.pagesListGestures.fine(
-          () => " - the user removed a finger, but is still interacting. Storing velocity for later.");
+      PageListViewportLogs.pagesListGestures
+          .fine(() => " - the user removed a finger, but is still interacting. Storing velocity for later.");
       PageListViewportLogs.pagesListGestures
           .fine(() => " - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}");
       return;
@@ -609,8 +604,7 @@ class DeprecatedPanAndScaleVelocityTracker {
         .fine(() => " - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
   }
 
-  Duration get _timeSinceStartOfGesture =>
-      Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
+  Duration get _timeSinceStartOfGesture => Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
 
   Duration? get _timeSinceLastGesture => _previousGestureEndTimeInMillis != null
       ? Duration(milliseconds: _clock.millis - _previousGestureEndTimeInMillis!)

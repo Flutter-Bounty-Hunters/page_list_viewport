@@ -34,7 +34,7 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
-  static const _pageCount = 200;
+  static const _pageCount = 20;
   static const _naturalPageSizeInInches = Size(8.5, 11);
 
   late final PageListViewportController _controller;
