@@ -307,6 +307,7 @@ class PageListViewportController extends OrientationController {
 
   bool _isFirstLayoutForController = true;
 
+  bool get isRunningOrientationSimulation => _activeSimulation != null;
   OrientationSimulation? _activeSimulation;
   Ticker? _simulationTicker;
   Duration? _previousSimulationTime;
@@ -606,7 +607,7 @@ class PageListViewportController extends OrientationController {
   }
 
   void _onSimulationTick(Duration elapsedTime) {
-    if (_activeSimulation == null) {
+    if (!isRunningOrientationSimulation) {
       return;
     }
     if (elapsedTime == Duration.zero) {
