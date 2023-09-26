@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/physics.dart';
 import 'package:flutter/widgets.dart';
+import 'package:page_list_viewport/src/custom_long_press_gesture_recognizer.dart';
 
 import 'logging.dart';
 import 'page_list_viewport.dart';
@@ -300,19 +301,31 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       onPointerDown: _onPointerDown,
       onPointerUp: _onPointerUp,
       onPointerCancel: _onPointerCancel,
-      child: GestureDetector(
-        onTapUp: widget.onTapUp,
-        onLongPressStart: widget.onLongPressStart,
-        onLongPressMoveUpdate: widget.onLongPressMoveUpdate,
-        onLongPressEnd: widget.onLongPressEnd,
-        onDoubleTapDown: widget.onDoubleTapDown,
-        onDoubleTap: widget.onDoubleTap,
-        onDoubleTapCancel: widget.onDoubleTapCancel,
-        onScaleStart: _onScaleStart,
-        onScaleUpdate: _onScaleUpdate,
-        onScaleEnd: _onScaleEnd,
-        supportedDevices: widget.panAndZoomPointerDevices,
-        child: widget.child,
+      child: RawGestureDetector(
+        gestures: {
+          CustomLongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<CustomLongPressGestureRecognizer>(
+            () => CustomLongPressGestureRecognizer(
+              supportedDevices: widget.panAndZoomPointerDevices,
+            ),
+            (CustomLongPressGestureRecognizer instance) {
+              instance
+                ..onLongPressEnd = widget.onLongPressEnd
+                ..onLongPressStart = widget.onLongPressStart
+                ..onLongPressMoveUpdate = widget.onLongPressMoveUpdate;
+            },
+          ),
+        },
+        child: GestureDetector(
+          onTapUp: widget.onTapUp,
+          onDoubleTapDown: widget.onDoubleTapDown,
+          onDoubleTap: widget.onDoubleTap,
+          onDoubleTapCancel: widget.onDoubleTapCancel,
+          onScaleStart: _onScaleStart,
+          onScaleUpdate: _onScaleUpdate,
+          onScaleEnd: _onScaleEnd,
+          supportedDevices: widget.panAndZoomPointerDevices,
+          child: widget.child,
+        ),
       ),
     );
   }
