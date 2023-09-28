@@ -26,6 +26,7 @@ class PageListViewportGestures extends StatefulWidget {
       PointerDeviceKind.trackpad,
       PointerDeviceKind.touch,
     },
+    this.scrollSettleBehavior = ScrollSettlingBehavior.natural,
     this.clock = const Clock(),
     required this.child,
   }) : super(key: key);
@@ -54,6 +55,10 @@ class PageListViewportGestures extends StatefulWidget {
   /// When the user drags near 45 degrees, the user retains full pan control.
   final bool lockPanAxis;
 
+  /// The way that scrolling will settle at the end of ballistic motion, e.g.,
+  /// when the user flings the content.
+  final ScrollSettlingBehavior scrollSettleBehavior;
+
   /// Reports the time, so that the gesture system can track how much
   /// time has passed.
   ///
@@ -81,10 +86,34 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   Offset? _startOffset;
   int? _endTimeInMillis;
 
+  bool _isRunningSimulation = false;
+
   @override
   void initState() {
     super.initState();
     _panAndScaleVelocityTracker = DeprecatedPanAndScaleVelocityTracker(clock: widget.clock);
+
+    widget.controller.addListener(_onControllerChange);
+  }
+
+  @override
+  void didUpdateWidget(PageListViewportGestures oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.controller != oldWidget.controller) {
+      oldWidget.controller.removeListener(_onControllerChange);
+      widget.controller.addListener(_onControllerChange);
+
+      _isRunningSimulation = widget.controller.isRunningOrientationSimulation;
+    }
+  }
+
+  void _onControllerChange() {
+    if (_isRunningSimulation && !widget.controller.isRunningOrientationSimulation) {
+      // A simulation has come to rest. Clamp the final offset, as desired.
+      widget.controller.origin = widget.scrollSettleBehavior.correctFinalOffset(widget.controller.origin);
+      _isRunningSimulation = false;
+    }
   }
 
   void _onPointerDown(PointerDownEvent event) {
@@ -271,6 +300,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       ),
     );
     widget.controller.driveWithSimulation(panningSimulation);
+    _isRunningSimulation = true;
   }
 
   void _stopMomentum() {
@@ -303,6 +333,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     );
   }
 }
+
 
 /// Definiton for gestures' translation distance and velocity categories.
 ///
@@ -433,6 +464,48 @@ class GestureThresholdsAndScales {
   /// to scroll faster and faster with each consequtive swiping input.
   /// This is called repeated swipe (or scroll) acceleration
   static const Duration maxDurationForRepeatGesturesToAcceleratePanning = Duration(milliseconds: 1000);
+}
+
+abstract class ScrollSettlingBehavior {
+  static const natural = NaturalScrollSettlingBehavior();
+  static const wholePixel = WholePixelScrollSettlingBehavior();
+  static const halfPixel = HalfPixelScrollSettlingBehavior();
+
+  /// (Possibly) modifies the [finalOffset] of content in the viewport after
+  /// motion, so that, if desired, content offsets are confined to pixel
+  /// boundaries, or sub-pixels boundaries.
+  Offset correctFinalOffset(Offset finalOffset);
+}
+
+/// A [ScrollSettlingBehavior] that let's the natural ballistic motion come to rest
+/// where it wants.
+class NaturalScrollSettlingBehavior implements ScrollSettlingBehavior {
+  const NaturalScrollSettlingBehavior();
+
+  @override
+  Offset correctFinalOffset(Offset finalOffset) => finalOffset;
+}
+
+/// A [ScrollSettlingBehavior] that forces ballistic motion to stop at an integer
+/// pixel value.
+class WholePixelScrollSettlingBehavior implements ScrollSettlingBehavior {
+  const WholePixelScrollSettlingBehavior();
+
+  @override
+  Offset correctFinalOffset(Offset finalOffset) =>
+      Offset(finalOffset.dx.roundToDouble(), finalOffset.dy.roundToDouble());
+}
+
+/// A [ScrollSettlingBehavior] that forces ballistic motion to stop at a half-pixel
+/// value, i.e., a whole integer, or halfway between whole integers.
+class HalfPixelScrollSettlingBehavior implements ScrollSettlingBehavior {
+  const HalfPixelScrollSettlingBehavior();
+
+  @override
+  Offset correctFinalOffset(Offset finalOffset) => Offset(
+        (finalOffset.dx * 2).roundToDouble() / 2,
+        (finalOffset.dy * 2).roundToDouble() / 2,
+      );
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
