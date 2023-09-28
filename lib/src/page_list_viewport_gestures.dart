@@ -206,14 +206,15 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     // The viewport thhresholds define the angle window around the
     // vertical and horizontal axes which would result in axis locking.
     // Vertical axis locking if the angle lays in the
-    // (pi/2 - hAngle, pi/2 + hAngle) window.
-    // Horizontal window is (vAngle, pi - vAngle).
+    // (pi/2 - vAngle, pi/2 + vAngle) window.
+    // Horizontal window is (hAngle, 0) or (pi - hAngle, pi).
     const hAngle = GestureThresholdsAndScales.horizontalAxisLockAngle;
     const vAngle = GestureThresholdsAndScales.verticalAxisLockAngle;
-    if ((math.pi / 2 - hAngle < movementAnglePositive) && (movementAnglePositive < math.pi / 2 + hAngle)) {
+
+    if ((math.pi / 2 - vAngle < movementAnglePositive) && (movementAnglePositive < math.pi / 2 + vAngle)) {
       PageListViewportLogs.pagesListGestures.finer(() => "Locking panning into vertical-only movement.");
       _isLockedVertical = true;
-    } else if (movementAnglePositive < vAngle || movementAnglePositive > math.pi - vAngle) {
+    } else if (movementAnglePositive < hAngle || movementAnglePositive > math.pi - hAngle) {
       PageListViewportLogs.pagesListGestures.finer(() => "Locking panning into horizontal-only movement.");
       _isLockedHorizontal = true;
     }
@@ -253,11 +254,9 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   Duration get _timeSinceEndOfLastGesture => Duration(milliseconds: widget.clock.millis - _endTimeInMillis!);
   void _startMomentum() {
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum...");
-    final velocity = _panAndScaleVelocityTracker.velocity;
-    final ballisticSimulationInitialVelocityMultiplier =
-        _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier;
     final dragMultiplier = _panAndScaleVelocityTracker.dragIncreaseMultiplier;
-    PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum with velocity: $velocity");
+    PageListViewportLogs.pagesListGestures
+        .fine(() => "Starting momentum with velocity: ${_panAndScaleVelocityTracker.velocity}");
 
     final panningSimulation = BallisticPanningOrientationSimulation(
       initialOrientation: AxisAlignedOrientation(
@@ -266,8 +265,8 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       ),
       panningSimulation: PanningFrictionSimulation(
         position: widget.controller.origin,
-        velocity: velocity,
-        initialVelocityMultiplier: ballisticSimulationInitialVelocityMultiplier,
+        velocity: _panAndScaleVelocityTracker.velocity,
+        initialVelocityMultiplier: _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier,
         dragMultiplier: dragMultiplier,
       ),
     );
@@ -308,11 +307,11 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 /// Definiton for gestures' translation distance and velocity categories.
 ///
 /// Distances are tiny, small, and large.
-/// Velocities are slow, normal, and fast.
+/// Speeds are slow, normal, and fast.
 /// These categories are used to individually define ballistic simulation behavior
 /// across a variety of scrolling situations.
 class GestureThresholdsAndScales {
-  /// Definition for a tiny distance in pixels.
+  /// The maximum distance for a motion to be categorizes as "tiny".
   ///
   /// {@template distance_definitions}
   /// Gesture translation distance categorization.
@@ -328,49 +327,59 @@ class GestureThresholdsAndScales {
   /// {@macro distance_definitions}
   static const double smallDistanceMax = 120.0;
 
-  /// Definition for a slow velocity in pixels per second.
+  /// Maximum velocity for a gesture to be considered "slow".
   ///
-  /// {@template velocity_definitions}
-  /// Gesture velocity categorization.
+  /// {@template speed_definitions}
+  /// Gesture speed categorization.
   /// The launch velocity for the ballistic simulation can be individually
   /// scaled for gestures categorized into these categories.
-  /// Velocities scale categorization diagram:
+  /// Speeds scale categorization diagram:
   /// (0 ... "slow" ... slowVelocityMax] (... "normal" ... normalVelocityMax]( ... "fast" ...
   /// {@endtemplate}
-  static const double slowVelocityMax = 300.0;
+  static const double slowSpeedMax = 300.0;
 
-  /// Definition for a normal velocity in pixels per second.
+  /// Maximum speed for a gesture to be considered "normal".
   ///
-  /// {@macro velocity_definitions}
-  static const double normalVelocityMax = 850.0;
+  /// {@macro speed_definitions}
+  static const double normalSpeedMax = 850.0;
 
-  /// Minimal neccessary velocity when the user releases from any panning motion
+  /// Minimal neccessary speed when the user releases from any panning motion
   /// required for which a ballistic simulation to be launched.
   ///
   /// Value is in pixels per second.
-  static const double minSmallTranslationBallisticActivationVelocity = 120.0;
+  static const double minSmallTranslationBallisticActivationSpeed = 120.0;
 
   /// {@template velocity_increase}
   /// Ballistic simulation launch velocity multiplier according to the
   /// category into which its translation distanca and reported velocity
   /// fall.
   ///
-  /// Used to speed up or slow down the simulation speed for different gesture kidns.
+  /// Used to speed up or slow down the simulation speed for different gesture kinds.
   /// Is applied when the user releases an arbitrary direction panning motion (not locked axis), and the content goes
   /// ballistic.
   /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
   /// per second.
   /// {@endtemplate}
-  static const double smallTranslationSlowVelocityMultiplier = 0.5;
+  /// Modifies launch velocity for gestures categorizes with small translation distance and slow speed
+  static const double smallTranslationSlowSpeedMultiplier = 0.5;
 
   /// {@macro velocity_increase}
-  static const double smallTranslationNormalVelocityMultiplier = 0.6;
+  /// Modifies launch velocity for gestures categorizes with small translation distance and normal speed
+  static const double smallTranslationNormalSpeedMultiplier = 0.6;
 
   /// {@macro velocity_increase}
-  static const double smallTranslationFastVelocityMultiplier = 0.7;
+  /// Modifies launch velocity for gestures categorizes with small translation distance and fast speed
+  static const double smallTranslationFastSpeedMultiplier = 0.7;
 
   /// {@macro velocity_increase}
-  static const double largeTranslationNormalVelocityMultiplier = 0.85;
+  /// Modifies launch velocity for gestures categorizes with large translation distance and normal speed
+  static const double largeTranslationNormalSpeedMultiplier = 0.85;
+
+  /// {@macro velocity_increase}
+  /// Modifies launch velocity for gestures categorizes with large translation distance and fast speed
+  static const double largeTranslationFastSpeedMultiplier = 1.0;
+
+  // Tiny translation distance is not considered for ballistic simulation.
 
   /// Velocity multiplier that should be applied when the user releases an arbitrary direction
   /// panning motion (not locked axis), and the content goes ballistic.
@@ -423,7 +432,7 @@ class GestureThresholdsAndScales {
   /// Scrolls which are repeated frequently and are in the same direction should cause the viewport
   /// to scroll faster and faster with each consequtive swiping input.
   /// This is called repeated swipe (or scroll) acceleration
-  static const Duration timeBetweenRepeatedScrollGestures = Duration(milliseconds: 1000);
+  static const Duration maxDurationForRepeatGesturesToAcceleratePanning = Duration(milliseconds: 1000);
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
@@ -530,7 +539,7 @@ class DeprecatedPanAndScaleVelocityTracker {
           " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousGesturePointerCount. Current pointer count: ${details.pointerCount}");
       _isPossibleGestureContinuation = true;
     } else if (_timeSinceLastGesture != null &&
-        _timeSinceLastGesture! < GestureThresholdsAndScales.timeBetweenRepeatedScrollGestures) {
+        _timeSinceLastGesture! < GestureThresholdsAndScales.maxDurationForRepeatGesturesToAcceleratePanning) {
       // If the gesture is not a continued gesture, analyze if it can
       // be a repeated accelerated swipe.
 
@@ -624,8 +633,8 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     if (_previousGesturePointerCount > 1) {
-      // The user was scaling. Now the user is panning. We don't want scale
-      // gestures to contribute ballistic, so we set the launch velocity to zero.
+      // The user was scaling. Now the user is panning. We don't want scale gestures to result in a ballistic
+      // simulation, so we set the launch velocity to zero.
       // If the panning continues long enough, then we'll use the panning
       // velocity for ballistic.
       PageListViewportLogs.pagesListGestures
@@ -635,7 +644,7 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     final translationDistance = (_lastFocalPosition - _startFocalPosition).distance;
-    final velocityMagnitude = velocity.distance;
+    final speed = velocity.distance;
 
     // Set the default launch scrolling velocity multiplier.
     // The value multiplies the launch velocity for the ballistic simulation to speed it up or slow it down.
@@ -657,18 +666,16 @@ class DeprecatedPanAndScaleVelocityTracker {
       return;
     } else if (translationDistance < GestureThresholdsAndScales.smallDistanceMax) {
       // Small or tiny translation, depending on the velocity decide whether to simulate ballistic
-      if (velocityMagnitude > GestureThresholdsAndScales.normalVelocityMax) {
+      if (speed > GestureThresholdsAndScales.normalSpeedMax) {
         // Small translation, fast velocity
-        _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.smallTranslationFastVelocityMultiplier;
-      } else if (velocityMagnitude > GestureThresholdsAndScales.slowVelocityMax) {
+        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.smallTranslationFastSpeedMultiplier;
+      } else if (speed > GestureThresholdsAndScales.slowSpeedMax) {
         // Small translation, normal velocity
         _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.smallTranslationNormalVelocityMultiplier;
-      } else if (velocityMagnitude > GestureThresholdsAndScales.minSmallTranslationBallisticActivationVelocity) {
+            GestureThresholdsAndScales.smallTranslationNormalSpeedMultiplier;
+      } else if (speed > GestureThresholdsAndScales.minSmallTranslationBallisticActivationSpeed) {
         // Small translation, slow velocity
-        _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.smallTranslationSlowVelocityMultiplier;
+        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.smallTranslationSlowSpeedMultiplier;
       } else {
         // Small translation, velocity insufficient to launch a ballistic simulation
         _resetRepeatedAccelerationTracking();
@@ -676,14 +683,15 @@ class DeprecatedPanAndScaleVelocityTracker {
       }
     } else {
       // Large translation distance
-      if (velocityMagnitude > GestureThresholdsAndScales.normalVelocityMax) {
-        // Large translation, fast velocity
-      } else if (velocityMagnitude > GestureThresholdsAndScales.slowVelocityMax) {
+      if (speed > GestureThresholdsAndScales.normalSpeedMax) {
+        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.largeTranslationFastSpeedMultiplier;
+        // Large translation, fast speed
+      } else if (speed > GestureThresholdsAndScales.slowSpeedMax) {
         _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.largeTranslationNormalVelocityMultiplier;
-        // Large translation, normal velocity
+            GestureThresholdsAndScales.largeTranslationNormalSpeedMultiplier;
+        // Large translation, normal speed
       } else {
-        // Large translation, slow velocity
+        // Large translation, slow speed
         _resetRepeatedAccelerationTracking();
         return;
       }
@@ -703,9 +711,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       // computed as the vecor between the first and the last saved points in the history buffer.
       Offset historicTranslationVector = _focalPointHistory.elementAt(1) - _focalPointHistory.first;
       double scalarProduct = historicTranslationVector.dx * velocity.dx + historicTranslationVector.dy * velocity.dy;
-      // If the scalar product is nonpositive, the vectors are in opposite directions or
-      // perpendicular. The gesture is blocked.
       if (scalarProduct <= 0) {
+        // If the scalar product is nonpositive, the vectors are in opposite directions or
+        // Perpendicular. The gesture is blocked.
         _resetRepeatedAccelerationTracking();
         return;
       }
