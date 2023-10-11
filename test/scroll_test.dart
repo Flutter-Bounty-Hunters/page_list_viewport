@@ -13,7 +13,7 @@ void main() {
           scrollSettlingBehavior: ScrollSettlingBehavior.natural,
         );
 
-        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2900);
+        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2902);
         await widgetTester.pumpAndSettle();
 
         // Ensure that the final resting place wasn't adjusted at all.
@@ -22,7 +22,7 @@ void main() {
         // that the new final resting place is a value that wouldn't be accepted by
         // whole-pixel or half-pixel clamps, i.e., create a value with a fraction that's
         // in [0.1, 0.4],[0.6, 0.9].
-        const expectedRestingPlace = Offset(0, -1721.3);
+        const expectedRestingPlace = Offset(0, -1679.7);
         final distanceToExpectedRestingPlace = (controller.origin - expectedRestingPlace).distance;
         expect(
           distanceToExpectedRestingPlace,
@@ -40,7 +40,7 @@ void main() {
           scrollSettlingBehavior: ScrollSettlingBehavior.wholePixel,
         );
 
-        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2900);
+        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2902);
         await widgetTester.pumpAndSettle();
 
         // Ensure that we clamped at a whole pixel value.
@@ -48,7 +48,7 @@ void main() {
         // If dynamics ever change such that this test needs to be updated, make sure
         // that the new final resting place is somewhere between [0.1, 0.9] so that
         // the clamping behavior shifts the fraction to a whole pixel value.
-        const expectedRestingPlace = Offset(0, -1721.0);
+        const expectedRestingPlace = Offset(0.0, -1680.0);
         final distanceToExpectedRestingPlace = (controller.origin - expectedRestingPlace).distance;
         expect(
           distanceToExpectedRestingPlace,
@@ -66,7 +66,7 @@ void main() {
           scrollSettlingBehavior: ScrollSettlingBehavior.halfPixel,
         );
 
-        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2900);
+        await widgetTester.fling(find.byType(MaterialApp), const Offset(0, -500), 2902);
         await widgetTester.pumpAndSettle();
 
         // Ensure that we clamped halfway between two pixels.
@@ -74,7 +74,7 @@ void main() {
         // If dynamics ever change such that this test needs to be updated, make sure
         // that the new final resting place is somewhere between [0.3, 0.7] (but not 0.5)
         // so that the clamping behavior clamps to `0.5`.
-        const expectedRestingPlace = Offset(0, -1721.5);
+        const expectedRestingPlace = Offset(0, -1679.5);
         final distanceToExpectedRestingPlace = (controller.origin - expectedRestingPlace).distance;
         expect(
           distanceToExpectedRestingPlace,
