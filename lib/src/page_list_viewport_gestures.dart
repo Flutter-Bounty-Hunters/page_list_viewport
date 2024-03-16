@@ -334,7 +334,6 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   }
 }
 
-
 /// Definiton for gestures' translation distance and velocity categories.
 ///
 /// Distances are tiny, small, and large.
@@ -1060,7 +1059,7 @@ class FrictionAndFirstOrderDragBallisticSimulation extends Simulation {
     if (_finalTime - time < 2) {
       velo = velo / (_finalTime - time);
     }
-    return velo * _positionMultiplier;
+    return velo * _positionMultiplier * _sign;
   }
 
   /// The value of [x] at the time when the simulation stops.
@@ -1070,6 +1069,6 @@ class FrictionAndFirstOrderDragBallisticSimulation extends Simulation {
 
   @override
   bool isDone(double time) {
-    return time < _finalTime;
+    return time > _finalTime;
   }
 }
