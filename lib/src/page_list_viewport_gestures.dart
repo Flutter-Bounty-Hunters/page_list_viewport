@@ -1059,7 +1059,7 @@ class FrictionAndFirstOrderDragBallisticSimulation extends Simulation {
     if (_finalTime - time < 2) {
       velo = velo / (_finalTime - time);
     }
-    return velo * _positionMultiplier;
+    return velo * _positionMultiplier * _sign;
   }
 
   /// The value of [x] at the time when the simulation stops.
