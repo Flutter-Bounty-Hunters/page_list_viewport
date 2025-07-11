@@ -30,7 +30,7 @@ class PageListViewportGestures extends StatefulWidget {
     this.clock = const Clock(),
     required this.child,
   }) : super(key: key);
-  final PageListViewportController controller;
+  final OrientationController controller;
 
   // All of these methods were added because our client needs to
   // respond to them, and we internally respond to other gestures.

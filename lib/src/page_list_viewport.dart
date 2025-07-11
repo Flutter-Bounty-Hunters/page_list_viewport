@@ -6,7 +6,8 @@ import 'dart:math' as math;
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/widgets.dart';
-import 'package:vector_math/vector_math_64.dart';
+import 'package:page_list_viewport/src/page_list_viewport_variable_size.dart';
+//import 'package:vector_math/vector_math_64.dart';
 
 import 'logging.dart';
 
@@ -36,7 +37,22 @@ class PageListViewport extends RenderObjectWidget {
     this.pagePaintCacheCount = 0,
     required this.builder,
     this.rebuildOnOrientationChange = false,
-  }) : assert(pageLayoutCacheCount >= pagePaintCacheCount);
+  })  : assert(pageLayoutCacheCount >= pagePaintCacheCount),
+        _variablePageSize = false,
+        onGetNaturalPageSize = null;
+
+  const PageListViewport.variedPageSized({
+    super.key,
+    required PageListViewportWithVariableSizeController this.controller,
+    required this.pageCount,
+    required this.onGetNaturalPageSize,
+    this.pageLayoutCacheCount = 0,
+    this.pagePaintCacheCount = 0,
+    required this.builder,
+    this.rebuildOnOrientationChange = false,
+  })  : assert(pageLayoutCacheCount >= pagePaintCacheCount),
+        _variablePageSize = true,
+        naturalPageSize = null;
 
   /// Controller that pans and zooms the page content.
   final OrientationController controller;
@@ -45,7 +61,8 @@ class PageListViewport extends RenderObjectWidget {
   final int pageCount;
 
   /// The size of a single page, if no constraints were applied.
-  final Size naturalPageSize;
+  final Size? naturalPageSize;
+  final PageSizeResolver? onGetNaturalPageSize;
 
   /// The number of pages above and below the viewport that should
   /// be laid out, even though they aren't visible.
@@ -70,38 +87,65 @@ class PageListViewport extends RenderObjectWidget {
   /// on relative position or scale.
   final bool rebuildOnOrientationChange;
 
+  final bool _variablePageSize;
+
   @override
   RenderObjectElement createElement() {
     PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport element");
+    if (_variablePageSize) {
+      return PageListViewportWithVariableSizeElement(this);
+    }
+
     return PageListViewportElement(this);
   }
 
   @override
   RenderObject createRenderObject(BuildContext context) {
     PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport render object");
+    if (_variablePageSize) {
+      return RenderPageListVariableSizeViewport(
+        element: context as PageListViewportWithVariableSizeElement,
+        controller: controller,
+        pageCount: pageCount,
+        pageSizeResolver: onGetNaturalPageSize,
+        pageLayoutCacheCount: pageLayoutCacheCount,
+        pagePaintCacheCount: pagePaintCacheCount,
+      );
+    }
+
     return RenderPageListViewport(
       element: context as PageListViewportElement,
       controller: controller,
       pageCount: pageCount,
-      pageSize: naturalPageSize,
+      pageSize: naturalPageSize!,
       pageLayoutCacheCount: pageLayoutCacheCount,
       pagePaintCacheCount: pagePaintCacheCount,
     );
   }
 
   @override
-  void updateRenderObject(BuildContext context, RenderPageListViewport renderObject) {
+  void updateRenderObject(BuildContext context, RenderObject renderObject) {
     PageListViewportLogs.pagesList.finest(() => "Updating PageListViewport render object");
-    renderObject //
-      ..pageCount = pageCount
-      ..naturalPageSize = naturalPageSize
-      ..pageLayoutCacheCount = pageLayoutCacheCount
-      ..pagePaintCacheCount = pagePaintCacheCount
-      ..controller = controller;
+    if (renderObject is RenderPageListVariableSizeViewport) {
+      renderObject //
+        ..pageCount = pageCount
+        ..pageSizeResolver = onGetNaturalPageSize
+        ..pageLayoutCacheCount = pageLayoutCacheCount
+        ..pagePaintCacheCount = pagePaintCacheCount
+        ..controller = controller;
+    } else {
+      (renderObject as RenderPageListViewport) //
+        ..pageCount = pageCount
+        ..naturalPageSize = naturalPageSize!
+        ..pageLayoutCacheCount = pageLayoutCacheCount
+        ..pagePaintCacheCount = pagePaintCacheCount
+        ..controller = controller;
+    }
   }
 }
 
 typedef PageBuilder = Widget Function(BuildContext context, int pageIndex);
+typedef PageSizeResolver = Size Function(int pageIndex);
 
 class PageListViewportController extends OrientationController {
   PageListViewportController.startAtPage({
@@ -279,9 +323,9 @@ class PageListViewportController extends OrientationController {
   }
 
   @override
-  RenderPageListViewport? get viewport => _viewport;
+  PageListViewportLayout? get viewport => _viewport;
 
-  RenderPageListViewport? _viewport;
+  PageListViewportLayout? _viewport;
 
   /// Sets the [RenderPageListViewport] whose content transform is controlled
   /// by this controller.
@@ -291,7 +335,7 @@ class PageListViewportController extends OrientationController {
   /// making the content smaller than the viewport.
   @override
   @protected
-  set viewport(RenderPageListViewport? viewport) {
+  set viewport(PageListViewportLayout? viewport) {
     if (_viewport == viewport) {
       return;
     }
@@ -303,10 +347,11 @@ class PageListViewportController extends OrientationController {
     stopSimulation();
   }
 
-  Size? get _viewportSize => _viewport?.size;
+  Size? get _viewportSize => _viewport?.getSize();
 
   bool _isFirstLayoutForController = true;
 
+  @override
   bool get isRunningOrientationSimulation => _activeSimulation != null;
   OrientationSimulation? _activeSimulation;
   Ticker? _simulationTicker;
@@ -318,18 +363,20 @@ class PageListViewportController extends OrientationController {
   void onViewportLayout() {
     disableNotifications();
 
-    final minimumScaleToFillViewport = _viewport!.size.width / _viewport!._naturalPageSize.width;
+    final viewportSize = _viewportSize!;
+
+    final minimumScaleToFillViewport = viewportSize.width / _viewport!.getNaturalPageSize(0).width;
     minimumScale = minimumScaleToFillViewport;
 
-    if (_isFirstLayoutForController && _viewport!._pageCount > 0) {
+    if (_isFirstLayoutForController && _viewport!.getPageCount() > 0) {
       scale = minimumScaleToFillViewport;
 
       final totalContentHeight = _viewport!.calculateContentHeight(scale);
-      if (totalContentHeight < _viewport!.size.height) {
+      if (totalContentHeight < viewportSize.height) {
         // We don't have enough content to fill the viewport. Center the content, vertically.
         origin = Offset(
           origin.dx,
-          (_viewport!.size.height - totalContentHeight) / 2,
+          (viewportSize.height - totalContentHeight) / 2,
         );
       }
 
@@ -377,7 +424,7 @@ class PageListViewportController extends OrientationController {
 
   Offset _getPageOffset(int pageIndex, [double? zoomLevel]) {
     final desiredZoomLevel = zoomLevel ?? scale;
-    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
+    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(0, desiredZoomLevel);
     final desiredPageTopLeftInViewport =
         (_viewportSize!).center(Offset.zero) - Offset(pageSizeAtZoomLevel.width / 2, pageSizeAtZoomLevel.height / 2);
     final contentAboveDesiredPage = pageSizeAtZoomLevel.height * pageIndex;
@@ -401,7 +448,7 @@ class PageListViewportController extends OrientationController {
     stopSimulation();
 
     final desiredZoomLevel = zoomLevel ?? scale;
-    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
+    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(0, desiredZoomLevel);
     final pageFocalPointAtZoomLevel = pixelOffsetInPage * desiredZoomLevel;
     final desiredPageTopLeftInViewport = (_viewportSize!).center(-pageFocalPointAtZoomLevel);
     final contentAboveDesiredPage = pageSizeAtZoomLevel.height * pageIndex;
@@ -440,7 +487,7 @@ class PageListViewportController extends OrientationController {
     // on-going orientation simulations.
     stopSimulation();
 
-    final centerOfPage = _viewport!.calculatePageSize(1.0).center(Offset.zero);
+    final centerOfPage = _viewport!.calculatePageSize(0, 1.0).center(Offset.zero);
     return animateToOffsetInPage(pageIndex, centerOfPage, duration);
   }
 
@@ -472,7 +519,7 @@ class PageListViewportController extends OrientationController {
     stopSimulation();
 
     final desiredZoomLevel = zoomLevel ?? scale;
-    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(desiredZoomLevel);
+    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(0, desiredZoomLevel);
     final pageFocalPointAtZoomLevel = pixelOffsetInPage * desiredZoomLevel;
     final desiredPageTopLeftInViewport = (_viewportSize!).center(-pageFocalPointAtZoomLevel);
     final contentAboveDesiredPage = pageSizeAtZoomLevel.height * pageIndex;
@@ -516,13 +563,14 @@ class PageListViewportController extends OrientationController {
     notifyListeners();
   }
 
+  @override
   void translate(Offset deltaInScreenSpace) {
     PageListViewportLogs.pagesListController.fine(() => "Translation requested for delta: $deltaInScreenSpace");
     final desiredOrigin = _origin + deltaInScreenSpace;
     PageListViewportLogs.pagesListController.fine(() =>
         "Origin before adjustment: $_origin. Content height: ${_viewport!.calculateContentHeight(scale)}, Scale: $scale");
-    PageListViewportLogs.pagesListController
-        .fine(() => "Viewport size: ${_viewport!.size}, scaled page width: ${_viewport!.calculatePageWidth(scale)}");
+    PageListViewportLogs.pagesListController.fine(() =>
+        "Viewport size: ${_viewport!.getSize()}, scaled page width: ${_viewport!.calculatePageSize(0, scale).width}");
 
     // Stop any on-going orientation animation so that we can translate from the current orientation.
     _animationController.stop();
@@ -554,6 +602,7 @@ class PageListViewportController extends OrientationController {
     notifyListeners();
   }
 
+  @override
   void setScale(double newScale, Offset focalPointInViewport) {
     assert(newScale > 0.0);
     PageListViewportLogs.pagesListController
@@ -593,6 +642,7 @@ class PageListViewportController extends OrientationController {
   ///
   /// Any manual adjustment of the orientation will cause this simulation to immediately
   /// cease controlling the orientation.
+  @override
   void driveWithSimulation(OrientationSimulation simulation) {
     if (_activeSimulation != null) {
       stopSimulation();
@@ -648,6 +698,7 @@ class PageListViewportController extends OrientationController {
   }
 
   /// Stops any on-going orientation simulation, started by [driveWithSimulation].
+  @override
   void stopSimulation() {
     _activeSimulation = null;
 
@@ -667,9 +718,9 @@ class PageListViewportController extends OrientationController {
     double originX = desiredOrigin.dx;
     double originY = desiredOrigin.dy;
 
-    final contentWidth = _viewport!.calculatePageWidth(scale);
+    final contentWidth = _viewport!.calculatePageSize(0, scale).width;
     final contentHeight = _viewport!.calculateContentHeight(scale);
-    final viewportSize = _viewport!.size;
+    final viewportSize = _viewport!.getSize();
 
     if (contentWidth <= viewportSize.width) {
       originX = (viewportSize.width - contentWidth) / 2;
@@ -737,6 +788,13 @@ abstract class OrientationController with ChangeNotifier {
   double get scale;
   set scale(double newScale);
 
+  void setScale(double newScale, Offset focalPointInViewport);
+  void translate(Offset deltaInScreenSpace);
+  void driveWithSimulation(OrientationSimulation simulation);
+  void stopSimulation();
+
+  bool get isRunningOrientationSimulation;
+
   /// The [RenderPageListViewport] whose content transform is controlled
   /// by this controller.
   ///
@@ -744,7 +802,7 @@ abstract class OrientationController with ChangeNotifier {
   /// move or scale in ways that violates the viewport's constraints, such as
   /// making the content smaller than the viewport.
   @protected
-  RenderPageListViewport? get viewport;
+  PageListViewportLayout? get viewport;
 
   /// Sets the [RenderPageListViewport] whose content transform is controlled
   /// by this controller.
@@ -753,7 +811,7 @@ abstract class OrientationController with ChangeNotifier {
   /// move or scale in ways that violates the viewport's constraints, such as
   /// making the content smaller than the viewport.
   @protected
-  set viewport(RenderPageListViewport? viewport);
+  set viewport(PageListViewportLayout? viewport);
 
   @protected
   void onViewportLayout();
@@ -801,7 +859,15 @@ abstract class OrientationController with ChangeNotifier {
   }
 }
 
-class RenderPageListViewport extends RenderBox {
+abstract class PageListViewportLayout {
+  Size calculatePageSize(int pageIndex, double scale);
+  double calculateContentHeight(double scale);
+  Size getSize();
+  int getPageCount();
+  Size getNaturalPageSize(int pageIndex);
+}
+
+class RenderPageListViewport extends RenderBox implements PageListViewportLayout {
   RenderPageListViewport({
     required PageListViewportElement element,
     required OrientationController controller,
@@ -970,13 +1036,11 @@ class RenderPageListViewport extends RenderBox {
     }
   }
 
-  Size calculatePageSize(double scale) => _naturalPageSize * scale;
+  @override
+  Size calculatePageSize(int pageIndex, double scale) => _naturalPageSize * scale;
 
-  double calculatePageWidth(double scale) => _naturalPageSize.width * scale;
-
-  double calculatePageHeight(double scale) => _naturalPageSize.height * scale;
-
-  double calculateContentHeight(double scale) => calculatePageHeight(scale) * _pageCount;
+  @override
+  double calculateContentHeight(double scale) => calculatePageSize(0, scale).height * _pageCount;
 
   @override
   void performLayout() {
@@ -994,10 +1058,7 @@ class RenderPageListViewport extends RenderBox {
 
     _createAndCullVisibleAndCachedPages();
 
-    final pageSize = Size(
-      calculatePageWidth(_controller!.scale),
-      calculatePageHeight(_controller!.scale),
-    );
+    final pageSize = calculatePageSize(0, _controller!.scale);
 
     _visitLayoutChildren((pageIndex, childElement) {
       if (childElement == null) {
@@ -1132,7 +1193,7 @@ class RenderPageListViewport extends RenderBox {
             Timeline.startSync("Local to global");
           }
 
-          final pageOriginVec = transform.transform3(Vector3(0, 0, 0));
+          //final pageOriginVec = transform.transform3(Vector3(0, 0, 0));
           // PageListViewportLogs.pagesList.finer("Painting page index: $pageIndex");
           // PageListViewportLogs.pagesList.finer(" - child element: $childElement");
           // PageListViewportLogs.pagesList.finer(" - scaled page size: $_scaledPageSize");
@@ -1199,6 +1260,15 @@ class RenderPageListViewport extends RenderBox {
   int _findLastCachedPageIndex() {
     return math.min(_findLastVisiblePageIndex() + _pageLayoutCacheCount, _pageCount - 1);
   }
+
+  @override
+  Size getSize() => size;
+
+  @override
+  Size getNaturalPageSize(int pageIndex) => _naturalPageSize;
+
+  @override
+  int getPageCount() => _pageCount;
 }
 
 class PageListViewportElement extends RenderObjectElement {
@@ -1303,6 +1373,7 @@ class PageListViewportElement extends RenderObjectElement {
   @override
   void insertRenderObjectChild(RenderObject child, Object? slot) {
     PageListViewportLogs.pagesList.finest(() => "Viewport adopting render object child: $child");
+    // ignore: invalid_use_of_protected_member
     renderObject.adoptChild(child);
   }
 
@@ -1315,6 +1386,7 @@ class PageListViewportElement extends RenderObjectElement {
   void removeRenderObjectChild(RenderObject child, Object? slot) {
     PageListViewportLogs.pagesList
         .finest(() => "removeRenderObjectChild() - child: $child, slot: $slot, is attached? ${child.attached}");
+    // ignore: invalid_use_of_protected_member
     renderObject.dropChild(child);
   }
 }
