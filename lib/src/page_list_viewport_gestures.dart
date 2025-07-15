@@ -65,7 +65,9 @@ class PageListViewportGestures extends StatefulWidget {
   /// [clock] is configurable so that a fake version can be injected
   /// in tests.
   final Clock clock;
+
   final Widget child;
+
   @override
   State<PageListViewportGestures> createState() => _PageListViewportGesturesState();
 }
@@ -334,6 +336,40 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   }
 }
 
+class PageListViewportAxisLock {
+  const PageListViewportAxisLock({
+    this.minAxisLockingTranslationDistance = 2,
+    this.horizontalAxisLockAngle = math.pi / 12,
+    this.verticalAxisLockAngle: math.pi / 4,
+  });
+
+  /// Minimal translation distance required for a gesture to be considered for axis locking.
+  ///
+  /// After the user has panned more than this distance, the gesture will be locked
+  /// if it is close enough to the horizontal or vertical axis as defined in
+  /// [horizontalAxisLockAngle] and [verticalAxisLockAngle].
+  ///
+  /// Artificially increase the distance to prevent axis locking for tiny gestures.
+  /// Note that this depends on the rate at which the gestures are sampled.
+  final double minAxisLockingTranslationDistance;
+
+  /// Angle w.r.t. the horizontal axis for a gesture to be locked to the horizontal axis.
+  ///
+  /// {@template axis_locking_angles}
+  /// The angle defines a window around the axis, in which the gesture
+  /// will be locked to the axis.
+  ///
+  /// The larger this angle, the easier gestures will be locked to the axis.
+  /// The angle is measured in radians.
+  /// {@endtemplate}
+  final double horizontalAxisLockAngle;
+
+  /// Angle w.r.t. the vertical axis for a gesture to be locked to the vertical axis.
+  ///
+  /// {@macro axis_locking_angles}
+  final double verticalAxisLockAngle;
+}
+
 /// Definiton for gestures' translation distance and velocity categories.
 ///
 /// Distances are tiny, small, and large.
@@ -341,128 +377,311 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 /// These categories are used to individually define ballistic simulation behavior
 /// across a variety of scrolling situations.
 class GestureThresholdsAndScales {
-  /// The maximum distance for a motion to be categorizes as "tiny".
+  static const standard = GestureThresholdsAndScales(
+    tinyDistanceMax: 3,
+    smallDistanceMax: 120.0,
+    slowSpeedMax: 300.0,
+    normalSpeedMax: 850.0,
+    minSmallTranslationBallisticActivationSpeed: 120.0,
+    smallTranslationSlowSpeedMultiplier: 0.5,
+    smallTranslationNormalSpeedMultiplier: 0.6,
+    smallTranslationFastSpeedMultiplier: 0.7,
+    largeTranslationNormalSpeedMultiplier: 0.85,
+    largeTranslationFastSpeedMultiplier: 1.0,
+    diagonalLaunchVelocityMultiplier: 0.7,
+    defaultVelocityMultiplier: 1.0,
+    defaultDragMultiplier: 1.0,
+    minAxisLockingTranslationDistance: 2.0,
+    horizontalAxisLockAngle: math.pi / 12,
+    verticalAxisLockAngle: math.pi / 4,
+    maxDurationForRepeatGesturesToAcceleratePanning: Duration(milliseconds: 1000),
+  );
+
+  const GestureThresholdsAndScales({
+    required this.tinyDistanceMax,
+    required this.smallDistanceMax,
+    required this.slowSpeedMax,
+    required this.normalSpeedMax,
+    required this.minSmallTranslationBallisticActivationSpeed,
+    required this.smallTranslationSlowSpeedMultiplier,
+    required this.smallTranslationNormalSpeedMultiplier,
+    required this.smallTranslationFastSpeedMultiplier,
+    required this.largeTranslationNormalSpeedMultiplier,
+    required this.largeTranslationFastSpeedMultiplier,
+    required this.diagonalLaunchVelocityMultiplier,
+    required this.defaultVelocityMultiplier,
+    required this.defaultDragMultiplier,
+    required this.minAxisLockingTranslationDistance,
+    required this.horizontalAxisLockAngle,
+    required this.verticalAxisLockAngle,
+    required this.maxDurationForRepeatGesturesToAcceleratePanning,
+  });
+
+  /// The max distance for a motion to be categorized as "tiny".
   ///
   /// {@template distance_definitions}
-  /// Gesture translation distance categorization.
   /// The launch velocity for the ballistic simulation can be individually
   /// scaled for gestures categorized into these categories.
+  ///
   /// Distances scale diagram:
   /// (0 ... "tiny" ... tinyDistanceMax] (... "small" ... SmallDistanceMax]( ... "large" ...
   /// {@endtemplate}
-  static const double tinyDistanceMax = 3;
+  final double tinyDistanceMax;
 
-  /// Definition for a small distance in pixels.
+  /// The max distance, beyond a [tinyDistanceMax], which is considered "small".
   ///
   /// {@macro distance_definitions}
-  static const double smallDistanceMax = 120.0;
+  final double smallDistanceMax;
 
-  /// Maximum velocity for a gesture to be considered "slow".
+  /// The max speed for a gesture to be considered "slow".
   ///
   /// {@template speed_definitions}
-  /// Gesture speed categorization.
-  /// The launch velocity for the ballistic simulation can be individually
+  /// The launch speed for the ballistic simulation can be individually
   /// scaled for gestures categorized into these categories.
+  ///
   /// Speeds scale categorization diagram:
   /// (0 ... "slow" ... slowVelocityMax] (... "normal" ... normalVelocityMax]( ... "fast" ...
   /// {@endtemplate}
-  static const double slowSpeedMax = 300.0;
+  final double slowSpeedMax;
 
-  /// Maximum speed for a gesture to be considered "normal".
+  /// The max speed, beyond [slowSpeedMax], for a gesture to be considered "normal".
   ///
   /// {@macro speed_definitions}
-  static const double normalSpeedMax = 850.0;
+  final double normalSpeedMax;
 
-  /// Minimal neccessary speed when the user releases from any panning motion
-  /// required for which a ballistic simulation to be launched.
+  /// Minimum release speed to trigger a ballistic simulation.
   ///
   /// Value is in pixels per second.
-  static const double minSmallTranslationBallisticActivationSpeed = 120.0;
+  final double minSmallTranslationBallisticActivationSpeed;
 
+  /// Ballistic velocity multiplier for "small and slow" releases.
+  ///
   /// {@template velocity_increase}
-  /// Ballistic simulation launch velocity multiplier according to the
-  /// category into which its translation distanca and reported velocity
-  /// fall.
+  /// Ballistic simulation launch velocity multiplier determined by the distance
+  /// of the gesture, and the velocity at release.
   ///
   /// Used to speed up or slow down the simulation speed for different gesture kinds.
-  /// Is applied when the user releases an arbitrary direction panning motion (not locked axis), and the content goes
-  /// ballistic.
+  /// Applied when the user releases an arbitrary direction panning motion (not locked axis),
+  /// and the content goes ballistic.
+  ///
   /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
   /// per second.
   /// {@endtemplate}
-  /// Modifies launch velocity for gestures categorizes with small translation distance and slow speed
-  static const double smallTranslationSlowSpeedMultiplier = 0.5;
+  final double smallTranslationSlowSpeedMultiplier;
 
+  /// Ballistic velocity multiplier for "small and normal speed" releases.
+  ///
   /// {@macro velocity_increase}
-  /// Modifies launch velocity for gestures categorizes with small translation distance and normal speed
-  static const double smallTranslationNormalSpeedMultiplier = 0.6;
+  final double smallTranslationNormalSpeedMultiplier;
 
+  /// Ballistic velocity multiplier for "small and fast" releases.
+  ///
   /// {@macro velocity_increase}
-  /// Modifies launch velocity for gestures categorizes with small translation distance and fast speed
-  static const double smallTranslationFastSpeedMultiplier = 0.7;
+  final double smallTranslationFastSpeedMultiplier;
 
+  /// Ballistic velocity multiplier for "large and normal speed" releases.
+  ///
   /// {@macro velocity_increase}
-  /// Modifies launch velocity for gestures categorizes with large translation distance and normal speed
-  static const double largeTranslationNormalSpeedMultiplier = 0.85;
+  final double largeTranslationNormalSpeedMultiplier;
 
+  /// Ballistic velocity multiplier for "small and fast" releases.
+  ///
   /// {@macro velocity_increase}
-  /// Modifies launch velocity for gestures categorizes with large translation distance and fast speed
-  static const double largeTranslationFastSpeedMultiplier = 1.0;
+  final double largeTranslationFastSpeedMultiplier;
 
   // Tiny translation distance is not considered for ballistic simulation.
 
-  /// Velocity multiplier that should be applied when the user releases an arbitrary direction
-  /// panning motion (not locked axis), and the content goes ballistic.
+  /// Velocity multiplier that should be applied when the user releases an
+  /// arbitrary direction panning motion (not locked axis), and the content
+  /// goes ballistic.
   ///
-  /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
-  /// per second.
+  /// This value is unit-less and should be multiplied by a velocity that's
+  /// measured in pixels per second.
+  ///
   /// Speed up the diagonal ballistic simulation.
-  static const double diagonalLaunchVelocityMultiplier = 0.7;
+  final double diagonalLaunchVelocityMultiplier;
 
   /// Default velocity multiplier that should be applied when the user lifts
   /// their finger after a panning motion when the content goes ballistic.
   ///
-  /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
-  /// per second.
-  static const double defaultVelocityMultiplier = 1.0;
+  /// This value is unit-less and should be multiplied by a velocity that's
+  /// measured in pixels per second.
+  final double defaultVelocityMultiplier;
 
   /// Increase the drag coefficient of the ballistic simulation.
   ///
   /// Higher drag coefficient means that the simulation launched after user lifts
-  /// their finger will deccelerate faster.
-  /// The drag deccelaration term in the simulation is -d/dt(v) = dragCoefficient * v.
-  static const double defaultDragMultiplier = 1.0;
+  /// their finger will decelerate faster.
+  ///
+  /// The drag deceleration term in the simulation is `-d/dt(v) = dragCoefficient * v`.
+  final double defaultDragMultiplier;
 
   /// Minimal translation distance required for a gesture to be considered for axis locking.
   ///
   /// After the user has panned more than this distance, the gesture will be locked
   /// if it is close enough to the horizontal or vertical axis as defined in
   /// [horizontalAxisLockAngle] and [verticalAxisLockAngle].
+  ///
   /// Artificially increase the distance to prevent axis locking for tiny gestures.
   /// Note that this depends on the rate at which the gestures are sampled.
-  static const double minAxisLockingTranslationDistance = 2.0;
+  final double minAxisLockingTranslationDistance;
 
   /// Angle w.r.t. the horizontal axis for a gesture to be locked to the horizontal axis.
   ///
   /// {@template axis_locking_angles}
   /// The angle defines a window around the axis, in which the gesture
   /// will be locked to the axis.
+  ///
   /// The larger this angle, the easier gestures will be locked to the axis.
   /// The angle is measured in radians.
   /// {@endtemplate}
-  static const double horizontalAxisLockAngle = math.pi / 12;
+  final double horizontalAxisLockAngle;
 
   /// Angle w.r.t. the vertical axis for a gesture to be locked to the vertical axis.
   ///
   /// {@macro axis_locking_angles}
-  static const double verticalAxisLockAngle = math.pi / 4;
+  final double verticalAxisLockAngle;
 
-  /// Maximal time between any two scrolling gestures for them to be considered for viewport scrolling acceleration
+  /// Maximal time between any two scrolling gestures for them to be considered for
+  /// viewport scrolling acceleration
   ///
-  /// Scrolls which are repeated frequently and are in the same direction should cause the viewport
-  /// to scroll faster and faster with each consequtive swiping input.
+  /// Scrolls which are repeated frequently and are in the same direction should
+  /// cause the viewport to scroll faster and faster with each consecutive swiping
+  /// input.
+  ///
   /// This is called repeated swipe (or scroll) acceleration
-  static const Duration maxDurationForRepeatGesturesToAcceleratePanning = Duration(milliseconds: 1000);
+  final Duration maxDurationForRepeatGesturesToAcceleratePanning;
+}
+
+class PageListViewportBallistics {
+  static const standard = PageListViewportBallistics(
+    defaultDragMultiplier: 1.0,
+    defaultVelocityMultiplier: 1.0,
+    tinyDistanceMax: 3,
+    smallDistanceMax: 120.0,
+    slowSpeedMax: 300.0,
+    normalSpeedMax: 850.0,
+    minSmallTranslationBallisticActivationSpeed: 120.0,
+    smallTranslationSlowSpeedMultiplier: 0.5,
+    smallTranslationNormalSpeedMultiplier: 0.6,
+    smallTranslationFastSpeedMultiplier: 0.7,
+    largeTranslationNormalSpeedMultiplier: 0.85,
+    largeTranslationFastSpeedMultiplier: 1.0,
+    maxDurationForRepeatGesturesToAcceleratePanning: Duration(milliseconds: 1000),
+  );
+
+  const PageListViewportBallistics({
+    required this.defaultDragMultiplier,
+    required this.defaultVelocityMultiplier,
+    required this.tinyDistanceMax,
+    required this.smallDistanceMax,
+    required this.slowSpeedMax,
+    required this.normalSpeedMax,
+    required this.minSmallTranslationBallisticActivationSpeed,
+    required this.smallTranslationSlowSpeedMultiplier,
+    required this.smallTranslationNormalSpeedMultiplier,
+    required this.smallTranslationFastSpeedMultiplier,
+    required this.largeTranslationNormalSpeedMultiplier,
+    required this.largeTranslationFastSpeedMultiplier,
+    required this.maxDurationForRepeatGesturesToAcceleratePanning,
+  });
+
+  /// Increase the drag coefficient of the ballistic simulation.
+  ///
+  /// Higher drag coefficient means that the simulation launched after user lifts
+  /// their finger will decelerate faster.
+  ///
+  /// The drag deceleration term in the simulation is `-d/dt(v) = dragCoefficient * v`.
+  final double defaultDragMultiplier;
+
+  /// Default velocity multiplier that should be applied when the user lifts
+  /// their finger after a panning motion when the content goes ballistic.
+  ///
+  /// This value is unit-less and should be multiplied by a velocity that's
+  /// measured in pixels per second.
+  final double defaultVelocityMultiplier;
+
+  /// The max distance for a motion to be categorized as "tiny".
+  ///
+  /// {@template distance_definitions}
+  /// The launch velocity for the ballistic simulation can be individually
+  /// scaled for gestures categorized into these categories.
+  ///
+  /// Distances scale diagram:
+  /// (0 ... "tiny" ... tinyDistanceMax] (... "small" ... SmallDistanceMax]( ... "large" ...
+  /// {@endtemplate}
+  final double tinyDistanceMax;
+
+  /// The max distance, beyond a [tinyDistanceMax], which is considered "small".
+  ///
+  /// {@macro distance_definitions}
+  final double smallDistanceMax;
+
+  /// The max speed for a gesture to be considered "slow".
+  ///
+  /// {@template speed_definitions}
+  /// The launch speed for the ballistic simulation can be individually
+  /// scaled for gestures categorized into these categories.
+  ///
+  /// Speeds scale categorization diagram:
+  /// (0 ... "slow" ... slowVelocityMax] (... "normal" ... normalVelocityMax]( ... "fast" ...
+  /// {@endtemplate}
+  final double slowSpeedMax;
+
+  /// The max speed, beyond [slowSpeedMax], for a gesture to be considered "normal".
+  ///
+  /// {@macro speed_definitions}
+  final double normalSpeedMax;
+
+  /// Minimum release speed to trigger a ballistic simulation.
+  ///
+  /// Value is in pixels per second.
+  final double minSmallTranslationBallisticActivationSpeed;
+
+  /// Ballistic velocity multiplier for "small and slow" releases.
+  ///
+  /// {@template velocity_increase}
+  /// Ballistic simulation launch velocity multiplier determined by the distance
+  /// of the gesture, and the velocity at release.
+  ///
+  /// Used to speed up or slow down the simulation speed for different gesture kinds.
+  /// Applied when the user releases an arbitrary direction panning motion (not locked axis),
+  /// and the content goes ballistic.
+  ///
+  /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
+  /// per second.
+  /// {@endtemplate}
+  final double smallTranslationSlowSpeedMultiplier;
+
+  /// Ballistic velocity multiplier for "small and normal speed" releases.
+  ///
+  /// {@macro velocity_increase}
+  final double smallTranslationNormalSpeedMultiplier;
+
+  /// Ballistic velocity multiplier for "small and fast" releases.
+  ///
+  /// {@macro velocity_increase}
+  final double smallTranslationFastSpeedMultiplier;
+
+  /// Ballistic velocity multiplier for "large and normal speed" releases.
+  ///
+  /// {@macro velocity_increase}
+  final double largeTranslationNormalSpeedMultiplier;
+
+  /// Ballistic velocity multiplier for "small and fast" releases.
+  ///
+  /// {@macro velocity_increase}
+  final double largeTranslationFastSpeedMultiplier;
+
+  /// Maximal time between any two scrolling gestures for them to be considered for
+  /// viewport scrolling acceleration
+  ///
+  /// Scrolls which are repeated frequently and are in the same direction should
+  /// cause the viewport to scroll faster and faster with each consecutive swiping
+  /// input.
+  ///
+  /// This is called repeated swipe (or scroll) acceleration
+  final Duration maxDurationForRepeatGesturesToAcceleratePanning;
 }
 
 abstract class ScrollSettlingBehavior {
@@ -508,13 +727,17 @@ class HalfPixelScrollSettlingBehavior implements ScrollSettlingBehavior {
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
-  final _focalPointHistory = ListQueue<Offset>();
-
   DeprecatedPanAndScaleVelocityTracker({
     required Clock clock,
-  }) : _clock = clock;
+    PageListViewportBallistics ballistics = PageListViewportBallistics.standard,
+  })  : _clock = clock,
+        _ballistics = ballistics;
+
+  final _focalPointHistory = ListQueue<Offset>();
 
   final Clock _clock;
+
+  final PageListViewportBallistics _ballistics;
 
   int _previousGesturePointerCount = 0;
   int? _previousGestureEndTimeInMillis;
@@ -611,7 +834,7 @@ class DeprecatedPanAndScaleVelocityTracker {
           " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousGesturePointerCount. Current pointer count: ${details.pointerCount}");
       _isPossibleGestureContinuation = true;
     } else if (_timeSinceLastGesture != null &&
-        _timeSinceLastGesture! < GestureThresholdsAndScales.maxDurationForRepeatGesturesToAcceleratePanning) {
+        _timeSinceLastGesture! < _ballistics.maxDurationForRepeatGesturesToAcceleratePanning) {
       // If the gesture is not a continued gesture, analyze if it can
       // be a repeated accelerated swipe.
 
@@ -720,11 +943,11 @@ class DeprecatedPanAndScaleVelocityTracker {
 
     // Set the default launch scrolling velocity multiplier.
     // The value multiplies the launch velocity for the ballistic simulation to speed it up or slow it down.
-    _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.defaultVelocityMultiplier;
+    _ballisticSimulationInitialVelocityMultiplier = _ballistics.defaultVelocityMultiplier;
 
     // Set the default drag multiplier.
     // The scalar simply multiplies the drag coefficient. Larger multipliers mean faster decceleration.
-    _ballisticSimulationDragMultiplier = GestureThresholdsAndScales.defaultDragMultiplier;
+    _ballisticSimulationDragMultiplier = _ballistics.defaultDragMultiplier;
 
     // Judge the swiping gesture based on the translation distance
     // and the velocity and either:
@@ -732,22 +955,21 @@ class DeprecatedPanAndScaleVelocityTracker {
     // The swipe won't triger the ballistic simulation.
     // OR
     // Proceed to initializing a ballistic simulation for further motion.
-    if (translationDistance < GestureThresholdsAndScales.tinyDistanceMax) {
+    if (translationDistance < _ballistics.tinyDistanceMax) {
       // prevent ballistic simulation for tiny scrolls
       _resetRepeatedAccelerationTracking();
       return;
-    } else if (translationDistance < GestureThresholdsAndScales.smallDistanceMax) {
+    } else if (translationDistance < _ballistics.smallDistanceMax) {
       // Small or tiny translation, depending on the velocity decide whether to simulate ballistic
-      if (speed > GestureThresholdsAndScales.normalSpeedMax) {
+      if (speed > _ballistics.normalSpeedMax) {
         // Small translation, fast velocity
-        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.smallTranslationFastSpeedMultiplier;
-      } else if (speed > GestureThresholdsAndScales.slowSpeedMax) {
+        _ballisticSimulationInitialVelocityMultiplier = _ballistics.smallTranslationFastSpeedMultiplier;
+      } else if (speed > _ballistics.slowSpeedMax) {
         // Small translation, normal velocity
-        _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.smallTranslationNormalSpeedMultiplier;
-      } else if (speed > GestureThresholdsAndScales.minSmallTranslationBallisticActivationSpeed) {
+        _ballisticSimulationInitialVelocityMultiplier = _ballistics.smallTranslationNormalSpeedMultiplier;
+      } else if (speed > _ballistics.minSmallTranslationBallisticActivationSpeed) {
         // Small translation, slow velocity
-        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.smallTranslationSlowSpeedMultiplier;
+        _ballisticSimulationInitialVelocityMultiplier = _ballistics.smallTranslationSlowSpeedMultiplier;
       } else {
         // Small translation, velocity insufficient to launch a ballistic simulation
         _resetRepeatedAccelerationTracking();
@@ -755,12 +977,11 @@ class DeprecatedPanAndScaleVelocityTracker {
       }
     } else {
       // Large translation distance
-      if (speed > GestureThresholdsAndScales.normalSpeedMax) {
-        _ballisticSimulationInitialVelocityMultiplier = GestureThresholdsAndScales.largeTranslationFastSpeedMultiplier;
+      if (speed > _ballistics.normalSpeedMax) {
+        _ballisticSimulationInitialVelocityMultiplier = _ballistics.largeTranslationFastSpeedMultiplier;
         // Large translation, fast speed
-      } else if (speed > GestureThresholdsAndScales.slowSpeedMax) {
-        _ballisticSimulationInitialVelocityMultiplier =
-            GestureThresholdsAndScales.largeTranslationNormalSpeedMultiplier;
+      } else if (speed > _ballistics.slowSpeedMax) {
+        _ballisticSimulationInitialVelocityMultiplier = _ballistics.largeTranslationNormalSpeedMultiplier;
         // Large translation, normal speed
       } else {
         // Large translation, slow speed
