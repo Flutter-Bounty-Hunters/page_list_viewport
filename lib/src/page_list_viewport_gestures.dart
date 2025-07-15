@@ -21,6 +21,7 @@ class PageListViewportGestures extends StatefulWidget {
     this.onDoubleTap,
     this.onDoubleTapCancel,
     this.lockPanAxis = false,
+    this.axisLock = const PageListViewportAxisLock(),
     this.panAndZoomPointerDevices = const {
       PointerDeviceKind.mouse,
       PointerDeviceKind.trackpad,
@@ -54,6 +55,9 @@ class PageListViewportGestures extends StatefulWidget {
   ///
   /// When the user drags near 45 degrees, the user retains full pan control.
   final bool lockPanAxis;
+
+  /// The configuration for axis-lock behavior, when [lockPanAxis] is `true`.
+  final PageListViewportAxisLock axisLock;
 
   /// The way that scrolling will settle at the end of ballistic motion, e.g.,
   /// when the user flings the content.
@@ -209,7 +213,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       return;
     }
 
-    if (translation.distance < GestureThresholdsAndScales.minAxisLockingTranslationDistance) {
+    if (translation.distance < widget.axisLock.minAxisLockingTranslationDistance) {
       // The translation distance is not sufficiently large to be
       // considered. Small translations should cause panning in an arbitrary direction.
       // This translation distance filtering also filters out the artifacts of screen calibration, which are
@@ -239,8 +243,8 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     // Vertical axis locking if the angle lays in the
     // (pi/2 - vAngle, pi/2 + vAngle) window.
     // Horizontal window is (hAngle, 0) or (pi - hAngle, pi).
-    const hAngle = GestureThresholdsAndScales.horizontalAxisLockAngle;
-    const vAngle = GestureThresholdsAndScales.verticalAxisLockAngle;
+    final hAngle = widget.axisLock.horizontalAxisLockAngle;
+    final vAngle = widget.axisLock.verticalAxisLockAngle;
 
     if ((math.pi / 2 - vAngle < movementAnglePositive) && (movementAnglePositive < math.pi / 2 + vAngle)) {
       PageListViewportLogs.pagesListGestures.finer(() => "Locking panning into vertical-only movement.");
@@ -297,7 +301,8 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
       panningSimulation: PanningFrictionSimulation(
         position: widget.controller.origin,
         velocity: _panAndScaleVelocityTracker.velocity,
-        initialVelocityMultiplier: _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier,
+        lockedAxisSimulationInitialVelocityMultiplier:
+            _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier,
         dragMultiplier: dragMultiplier,
       ),
     );
@@ -340,7 +345,7 @@ class PageListViewportAxisLock {
   const PageListViewportAxisLock({
     this.minAxisLockingTranslationDistance = 2,
     this.horizontalAxisLockAngle = math.pi / 12,
-    this.verticalAxisLockAngle: math.pi / 4,
+    this.verticalAxisLockAngle = math.pi / 4,
   });
 
   /// Minimal translation distance required for a gesture to be considered for axis locking.
@@ -368,189 +373,6 @@ class PageListViewportAxisLock {
   ///
   /// {@macro axis_locking_angles}
   final double verticalAxisLockAngle;
-}
-
-/// Definiton for gestures' translation distance and velocity categories.
-///
-/// Distances are tiny, small, and large.
-/// Speeds are slow, normal, and fast.
-/// These categories are used to individually define ballistic simulation behavior
-/// across a variety of scrolling situations.
-class GestureThresholdsAndScales {
-  static const standard = GestureThresholdsAndScales(
-    tinyDistanceMax: 3,
-    smallDistanceMax: 120.0,
-    slowSpeedMax: 300.0,
-    normalSpeedMax: 850.0,
-    minSmallTranslationBallisticActivationSpeed: 120.0,
-    smallTranslationSlowSpeedMultiplier: 0.5,
-    smallTranslationNormalSpeedMultiplier: 0.6,
-    smallTranslationFastSpeedMultiplier: 0.7,
-    largeTranslationNormalSpeedMultiplier: 0.85,
-    largeTranslationFastSpeedMultiplier: 1.0,
-    diagonalLaunchVelocityMultiplier: 0.7,
-    defaultVelocityMultiplier: 1.0,
-    defaultDragMultiplier: 1.0,
-    minAxisLockingTranslationDistance: 2.0,
-    horizontalAxisLockAngle: math.pi / 12,
-    verticalAxisLockAngle: math.pi / 4,
-    maxDurationForRepeatGesturesToAcceleratePanning: Duration(milliseconds: 1000),
-  );
-
-  const GestureThresholdsAndScales({
-    required this.tinyDistanceMax,
-    required this.smallDistanceMax,
-    required this.slowSpeedMax,
-    required this.normalSpeedMax,
-    required this.minSmallTranslationBallisticActivationSpeed,
-    required this.smallTranslationSlowSpeedMultiplier,
-    required this.smallTranslationNormalSpeedMultiplier,
-    required this.smallTranslationFastSpeedMultiplier,
-    required this.largeTranslationNormalSpeedMultiplier,
-    required this.largeTranslationFastSpeedMultiplier,
-    required this.diagonalLaunchVelocityMultiplier,
-    required this.defaultVelocityMultiplier,
-    required this.defaultDragMultiplier,
-    required this.minAxisLockingTranslationDistance,
-    required this.horizontalAxisLockAngle,
-    required this.verticalAxisLockAngle,
-    required this.maxDurationForRepeatGesturesToAcceleratePanning,
-  });
-
-  /// The max distance for a motion to be categorized as "tiny".
-  ///
-  /// {@template distance_definitions}
-  /// The launch velocity for the ballistic simulation can be individually
-  /// scaled for gestures categorized into these categories.
-  ///
-  /// Distances scale diagram:
-  /// (0 ... "tiny" ... tinyDistanceMax] (... "small" ... SmallDistanceMax]( ... "large" ...
-  /// {@endtemplate}
-  final double tinyDistanceMax;
-
-  /// The max distance, beyond a [tinyDistanceMax], which is considered "small".
-  ///
-  /// {@macro distance_definitions}
-  final double smallDistanceMax;
-
-  /// The max speed for a gesture to be considered "slow".
-  ///
-  /// {@template speed_definitions}
-  /// The launch speed for the ballistic simulation can be individually
-  /// scaled for gestures categorized into these categories.
-  ///
-  /// Speeds scale categorization diagram:
-  /// (0 ... "slow" ... slowVelocityMax] (... "normal" ... normalVelocityMax]( ... "fast" ...
-  /// {@endtemplate}
-  final double slowSpeedMax;
-
-  /// The max speed, beyond [slowSpeedMax], for a gesture to be considered "normal".
-  ///
-  /// {@macro speed_definitions}
-  final double normalSpeedMax;
-
-  /// Minimum release speed to trigger a ballistic simulation.
-  ///
-  /// Value is in pixels per second.
-  final double minSmallTranslationBallisticActivationSpeed;
-
-  /// Ballistic velocity multiplier for "small and slow" releases.
-  ///
-  /// {@template velocity_increase}
-  /// Ballistic simulation launch velocity multiplier determined by the distance
-  /// of the gesture, and the velocity at release.
-  ///
-  /// Used to speed up or slow down the simulation speed for different gesture kinds.
-  /// Applied when the user releases an arbitrary direction panning motion (not locked axis),
-  /// and the content goes ballistic.
-  ///
-  /// This value is unit-less and should be multiplied by a velocity that's measured in pixels
-  /// per second.
-  /// {@endtemplate}
-  final double smallTranslationSlowSpeedMultiplier;
-
-  /// Ballistic velocity multiplier for "small and normal speed" releases.
-  ///
-  /// {@macro velocity_increase}
-  final double smallTranslationNormalSpeedMultiplier;
-
-  /// Ballistic velocity multiplier for "small and fast" releases.
-  ///
-  /// {@macro velocity_increase}
-  final double smallTranslationFastSpeedMultiplier;
-
-  /// Ballistic velocity multiplier for "large and normal speed" releases.
-  ///
-  /// {@macro velocity_increase}
-  final double largeTranslationNormalSpeedMultiplier;
-
-  /// Ballistic velocity multiplier for "small and fast" releases.
-  ///
-  /// {@macro velocity_increase}
-  final double largeTranslationFastSpeedMultiplier;
-
-  // Tiny translation distance is not considered for ballistic simulation.
-
-  /// Velocity multiplier that should be applied when the user releases an
-  /// arbitrary direction panning motion (not locked axis), and the content
-  /// goes ballistic.
-  ///
-  /// This value is unit-less and should be multiplied by a velocity that's
-  /// measured in pixels per second.
-  ///
-  /// Speed up the diagonal ballistic simulation.
-  final double diagonalLaunchVelocityMultiplier;
-
-  /// Default velocity multiplier that should be applied when the user lifts
-  /// their finger after a panning motion when the content goes ballistic.
-  ///
-  /// This value is unit-less and should be multiplied by a velocity that's
-  /// measured in pixels per second.
-  final double defaultVelocityMultiplier;
-
-  /// Increase the drag coefficient of the ballistic simulation.
-  ///
-  /// Higher drag coefficient means that the simulation launched after user lifts
-  /// their finger will decelerate faster.
-  ///
-  /// The drag deceleration term in the simulation is `-d/dt(v) = dragCoefficient * v`.
-  final double defaultDragMultiplier;
-
-  /// Minimal translation distance required for a gesture to be considered for axis locking.
-  ///
-  /// After the user has panned more than this distance, the gesture will be locked
-  /// if it is close enough to the horizontal or vertical axis as defined in
-  /// [horizontalAxisLockAngle] and [verticalAxisLockAngle].
-  ///
-  /// Artificially increase the distance to prevent axis locking for tiny gestures.
-  /// Note that this depends on the rate at which the gestures are sampled.
-  final double minAxisLockingTranslationDistance;
-
-  /// Angle w.r.t. the horizontal axis for a gesture to be locked to the horizontal axis.
-  ///
-  /// {@template axis_locking_angles}
-  /// The angle defines a window around the axis, in which the gesture
-  /// will be locked to the axis.
-  ///
-  /// The larger this angle, the easier gestures will be locked to the axis.
-  /// The angle is measured in radians.
-  /// {@endtemplate}
-  final double horizontalAxisLockAngle;
-
-  /// Angle w.r.t. the vertical axis for a gesture to be locked to the vertical axis.
-  ///
-  /// {@macro axis_locking_angles}
-  final double verticalAxisLockAngle;
-
-  /// Maximal time between any two scrolling gestures for them to be considered for
-  /// viewport scrolling acceleration
-  ///
-  /// Scrolls which are repeated frequently and are in the same direction should
-  /// cause the viewport to scroll faster and faster with each consecutive swiping
-  /// input.
-  ///
-  /// This is called repeated swipe (or scroll) acceleration
-  final Duration maxDurationForRepeatGesturesToAcceleratePanning;
 }
 
 class PageListViewportBallistics {
@@ -755,12 +577,12 @@ class DeprecatedPanAndScaleVelocityTracker {
   bool _isPossibleRepeatedAcceleratedSwipe = false;
 
   // Whether the previous gesture ended up launching a scrolling ballistic simulation.
-  bool _previosLaunchedWithBallistic = true;
+  bool _previousLaunchedWithBallistic = true;
 
   // Number of repeated scrolling gestures already considered in the viewport acceleration.
   int _numberOfRepeatedAcceleratedSwipes = 0;
 
-  // Velocity with which the prevous gesture which triggered the ballistic simulation
+  // Velocity with which the previous gesture which triggered the ballistic simulation
   // was launched.
   Offset _previousLaunchVelocity = Offset.zero;
 
@@ -841,7 +663,7 @@ class DeprecatedPanAndScaleVelocityTracker {
       // If the previous gesture was a swipe, which triggered a ballistic simulation
       // and it was in the y direction only, mark the gesture as potentially a repeated
       // acceleration swipe.
-      if (_previosLaunchedWithBallistic &&
+      if (_previousLaunchedWithBallistic &&
           // Scaling gestures cannot trigger acceleration of the viewport
           details.pointerCount == 1 &&
           !(_launchVelocity.dx.abs() > 0) &&
@@ -898,7 +720,7 @@ class DeprecatedPanAndScaleVelocityTracker {
   // Should be called after panning velocityTracker decides to return
   // and not launch a ballistic simulation for a gesture.
   void _resetRepeatedAccelerationTracking() {
-    _previosLaunchedWithBallistic = false;
+    _previousLaunchedWithBallistic = false;
     _numberOfRepeatedAcceleratedSwipes = 0;
     _isPossibleRepeatedAcceleratedSwipe = false;
     _launchVelocity = Offset.zero;
@@ -1045,7 +867,7 @@ class DeprecatedPanAndScaleVelocityTracker {
     // so the next gesture, the second in a series,
     // can be considered for repeated swipe acceleration.
     if (_launchVelocity.distance > 0) {
-      _previosLaunchedWithBallistic = true;
+      _previousLaunchedWithBallistic = true;
     }
 
     PageListViewportLogs.pagesListGestures
@@ -1108,11 +930,11 @@ class PanningFrictionSimulation implements PanningSimulation {
   PanningFrictionSimulation({
     required Offset position,
     required Offset velocity,
-    double initialVelocityMultiplier = 1.0,
+    double lockedAxisSimulationInitialVelocityMultiplier = 1.0,
+    double panningAxisSimulationInitialVelocityMultiplier = 0.7,
     double dragMultiplier = 1.0,
   })  : _position = position,
         _velocity = velocity,
-        _ballisticSimulationInitialVelocityMultiplier = initialVelocityMultiplier,
         _dragMultiplier = dragMultiplier {
     if (_velocity.dx.abs() > 0 && _velocity.dy.abs() > 0) {
       // The simulation is not locked to an axis, it is in an arbitrary direction.
@@ -1124,7 +946,7 @@ class PanningFrictionSimulation implements PanningSimulation {
           _position.dx,
           _velocity.distance,
           math.cos(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: GestureThresholdsAndScales.diagonalLaunchVelocityMultiplier);
+          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
           staticFrictionCoefficient,
@@ -1133,23 +955,34 @@ class PanningFrictionSimulation implements PanningSimulation {
           _position.dy,
           _velocity.distance,
           math.sin(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: GestureThresholdsAndScales.diagonalLaunchVelocityMultiplier);
+          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
     } else {
       // The simulation is locked to one of the axes.
 
       _xSimulation = FrictionAndFirstOrderDragBallisticSimulation(
-          staticFrictionCoefficient, verticalDragCoefficient * _dragMultiplier, mass, _position.dx, _velocity.dx, 1,
-          initialVelocityMultiplier: _ballisticSimulationInitialVelocityMultiplier);
+        staticFrictionCoefficient,
+        verticalDragCoefficient * _dragMultiplier,
+        mass,
+        _position.dx,
+        _velocity.dx,
+        1,
+        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier,
+      );
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
-          staticFrictionCoefficient, horizontalDragCoefficient * _dragMultiplier, mass, _position.dy, _velocity.dy, 1,
-          initialVelocityMultiplier: _ballisticSimulationInitialVelocityMultiplier);
+        staticFrictionCoefficient,
+        horizontalDragCoefficient * _dragMultiplier,
+        mass,
+        _position.dy,
+        _velocity.dy,
+        1,
+        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier,
+      );
     }
   }
 
   final Offset _position;
   final Offset _velocity;
-  final double _ballisticSimulationInitialVelocityMultiplier;
   final double _dragMultiplier;
   late final Simulation _xSimulation;
   late final Simulation _ySimulation;
