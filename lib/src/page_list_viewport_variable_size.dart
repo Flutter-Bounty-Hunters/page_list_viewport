@@ -825,10 +825,7 @@ class PageListViewportWithVariableSizeController extends OrientationController {
         );
       }
 
-      _isFirstLayoutForController = false;
-    } else if (scale < 1.0) {
-      // Update the private property so that we don't markNeedsLayout during layout.
-      scale = 1.0;
+      _isFirstLayoutForController = false;    
     }
 
     if (_initialPageIndex != null) {
@@ -1090,7 +1087,8 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     _animationController.stop();
     stopSimulation();
 
-    newScale = newScale.clamp(_minimumScale, maximumScale);
+    // The scale cannot be less than 1.0, otherwise the content won't fill the viewport's width.
+    newScale = newScale.clamp(math.max(_minimumScale, 1.0).toDouble(), maximumScale);
 
     final scaleDiff = newScale / _scale;
 
