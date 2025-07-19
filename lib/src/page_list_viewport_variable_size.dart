@@ -8,10 +8,15 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:page_list_viewport/page_list_viewport.dart';
 
+/// A viewport that displays [pageCount] pages of content, arranged in a vertical.
+///
+/// Each page can have its own natural page size, which is determined by [onGetNaturalPageSize].
+///
+/// {@macro page_list_viewport}
 class PageListViewportWithVariablePageSize extends RenderObjectWidget {
   const PageListViewportWithVariablePageSize({
     super.key,
-    required PageListViewportWithVariableSizeController this.controller,
+    required this.controller,
     required this.pageCount,
     required this.onGetNaturalPageSize,
     this.pageLayoutCacheCount = 0,
@@ -21,13 +26,13 @@ class PageListViewportWithVariablePageSize extends RenderObjectWidget {
   }) : assert(pageLayoutCacheCount >= pagePaintCacheCount);
 
   /// Controller that pans and zooms the page content.
-  final OrientationController controller;
+  final PageListViewportWithVariableSizeController controller;
 
   /// The number of pages displayed in this viewport.
   final int pageCount;
 
   /// The size of a single page, if no constraints were applied.
-  final PageSizeResolver? onGetNaturalPageSize;
+  final PageSizeResolver onGetNaturalPageSize;
 
   /// The number of pages above and below the viewport that should
   /// be laid out, even though they aren't visible.
@@ -199,6 +204,9 @@ class RenderPageListVariableSizeViewport extends RenderBox implements PageListVi
   @override
   set layer(ContainerLayer? newLayer) => super.layer = newLayer as ClipRectLayer?;
 
+  /// The baseline scale for each page, which is the ratio of the viewport width to the natural page width.
+  ///
+  /// This is the scale needed for each page to fill the viewport horizontally.
   final _pageBaselineScales = <double>[];
 
   @override
@@ -889,6 +897,8 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     final viewportSize = _viewportSize!;
 
     if (_isFirstLayoutForController && _viewport!.getPageCount() > 0) {
+      // 1.0 means we want to use the page's baseline scale, which will make it
+      // fill the available width.
       scale = 1.0;
 
       final totalContentHeight = _viewport!.calculateContentHeight(scale);
@@ -942,6 +952,8 @@ class PageListViewportWithVariableSizeController extends OrientationController {
   Offset _getPageOffset(int pageIndex, [double? zoomLevel]) {
     final desiredZoomLevel = zoomLevel ?? scale;
 
+    // Since each page can have its own size, to determine the offset we need to
+    // comput the page size for each page above the desired page index.
     double contentAboveDesiredPage = 0.0;
     for (int i = 0; i < pageIndex; i++) {
       final pageSizeAtZoomLevel = _viewport!.calculatePageSize(i, desiredZoomLevel);
@@ -1056,12 +1068,10 @@ class PageListViewportWithVariableSizeController extends OrientationController {
 
     final desiredZoomLevel = zoomLevel ?? scale;
 
-    final pageSizes = <Size>[];
     double contentAboveDesiredPage = 0.0;
     for (int i = 0; i < pageIndex; i++) {
       final pageSizeAtZoomLevel = _viewport!.calculatePageSize(i, desiredZoomLevel);
       contentAboveDesiredPage += pageSizeAtZoomLevel.height;
-      pageSizes.add(pageSizeAtZoomLevel);
     }
 
     final pageFocalPointAtZoomLevel = pixelOffsetInPage * desiredZoomLevel;
@@ -1079,13 +1089,13 @@ class PageListViewportWithVariableSizeController extends OrientationController {
       CurvedAnimation(parent: _animationController, curve: curve),
     );
 
-    //final animationDuration = duration;
     Duration animationDuration = duration;
     if (applyDurationPerPage) {
+      // Since we want to apply the duration per page, we need to find out how many pages
+      // are between the current first visible page and the new first visible page.
       final currentFirstVisiblePageIndex = _findFirstVisiblePageAtY(_origin.dy.abs());
       final newFirstVisiblePageIndex = _findFirstVisiblePageAtY(destinationOffset.dy.abs());
       final pageCount = (newFirstVisiblePageIndex - currentFirstVisiblePageIndex).abs() + 1;
-      print('pagecount: $pageCount');
 
       animationDuration *= pageCount;
     }
@@ -1311,4 +1321,5 @@ class PageListViewportWithVariableSizeController extends OrientationController {
   }
 }
 
+/// A method that returns the size of a page at the given [pageIndex].
 typedef PageSizeResolver = Size Function(int pageIndex);

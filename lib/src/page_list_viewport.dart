@@ -11,7 +11,15 @@ import 'package:page_list_viewport/src/page_list_viewport_variable_size.dart';
 
 import 'logging.dart';
 
+/// A viewport that displays pages of content, arranged in a vertical list.
+///
+/// Use [PageListViewport.sameSizePages] if all pages have the same natural
+/// size. Otherwise, use [PageListViewport.variedPages].
+///
+/// {@macro page_list_viewport}
 class PageListViewport {
+  /// Creates a viewport that displays [pageCount] pages of content, arranged in a vertical list,
+  /// where each page has the same [naturalPageSize].
   static PageListViewportWithFixedPageSize sameSizePages({
     Key? key,
     required OrientationController controller,
@@ -34,6 +42,8 @@ class PageListViewport {
     );
   }
 
+  /// Creates a viewport that displays [pageCount] pages of content, arranged in a vertical list,
+  /// where each page can have its own natural size, as determined by [onGetNaturalPageSize].
   static PageListViewportWithVariablePageSize variedPages({
     Key? key,
     required PageListViewportWithVariableSizeController controller,
@@ -59,6 +69,7 @@ class PageListViewport {
 /// A viewport that displays [pageCount] pages of content, arranged in a vertical
 /// list, with a given [naturalPageSize].
 ///
+/// {@template page_list_viewport}
 /// Each page is built lazily, by calling [builder].
 ///
 /// A [PageListViewportController] can translate and scale the pages in this
@@ -72,6 +83,7 @@ class PageListViewport {
 /// of the page, and the edge of the viewport.
 ///
 /// To control the [controller] with gestures, see [PageListViewportGestures].
+/// {@endtemplate}
 class PageListViewportWithFixedPageSize extends RenderObjectWidget {
   const PageListViewportWithFixedPageSize({
     super.key,
@@ -861,11 +873,32 @@ abstract class OrientationController with ChangeNotifier {
   }
 }
 
+/// The layout contract for a paginated viewport.
+///
+/// This interface exists to allow the implementation of fixed-size page and
+/// variable-size page layouts.
 abstract class PageListViewportLayout {
+  /// Calculates the size of a page at the specified [pageIndex] and [scale].
+  ///
+  /// The [scale] parameter represents the zoom or scaling factor to apply to the page.
   Size calculatePageSize(int pageIndex, double scale);
+
+  /// Calculates the total height of all pages at the given [scale].
+  ///
+  /// The [scale] parameter represents the zoom or scaling factor to apply to the content.
   double calculateContentHeight(double scale);
+
+  /// Returns the current size of the viewport.
+  ///
+  /// This represents the visible area in which pages are rendered.
   Size getSize();
+
+  /// Returns the total number of pages available in the viewport.
+  ///
+  /// This includes both visible and non-visible pages.
   int getPageCount();
+
+  /// Returns the natural (unscaled) size of a page at the specified [pageIndex].
   Size getNaturalPageSize(int pageIndex);
 }
 
