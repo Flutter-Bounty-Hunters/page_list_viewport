@@ -40,7 +40,7 @@ Future<void> _pumpPageListViewport(
       home: Scaffold(
         body: PageListViewportGestures(
           controller: controller,
-          child: PageListViewport(
+          child: PageListViewport.sameSizePages(
             controller: controller,
             pageCount: pageCount,
             naturalPageSize: naturalPageSize,

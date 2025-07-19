@@ -6,9 +6,10 @@ import 'package:flutter/widgets.dart';
 
 import 'logging.dart';
 import 'page_list_viewport.dart';
+import 'page_list_viewport_variable_size.dart';
 
 /// Controls a [PageListViewportController] with scale gestures to pan and zoom the
-/// associated [PageListViewport].
+/// associated [PageListViewportWithFixedPageSize] or [PageListViewportWithVariablePageSize].
 class PageListViewportGestures extends StatefulWidget {
   const PageListViewportGestures({
     Key? key,

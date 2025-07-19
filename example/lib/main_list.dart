@@ -75,7 +75,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         PageListViewportGestures(
           controller: _controller,
           lockPanAxis: true,
-          child: PageListViewport(
+          child: PageListViewport.sameSizePages(
             controller: _controller,
             pageCount: _pageCount,
             naturalPageSize: _naturalPageSizeInInches * 72 * MediaQuery.of(context).devicePixelRatio,

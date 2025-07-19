@@ -81,7 +81,7 @@ class _MyHomePageState extends State<MyHomePage> with TickerProviderStateMixin {
         PageListViewportGestures(
           controller: _controller,
           lockPanAxis: true,
-          child: PageListViewport.variedPageSized(
+          child: PageListViewport.variedPages(
             controller: _controller,
             pageCount: _pageCount,
             onGetNaturalPageSize: (pageIndex) =>

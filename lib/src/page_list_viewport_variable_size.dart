@@ -8,6 +8,81 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:page_list_viewport/page_list_viewport.dart';
 
+class PageListViewportWithVariablePageSize extends RenderObjectWidget {
+  const PageListViewportWithVariablePageSize({
+    super.key,
+    required PageListViewportWithVariableSizeController this.controller,
+    required this.pageCount,
+    required this.onGetNaturalPageSize,
+    this.pageLayoutCacheCount = 0,
+    this.pagePaintCacheCount = 0,
+    required this.builder,
+    this.rebuildOnOrientationChange = false,
+  }) : assert(pageLayoutCacheCount >= pagePaintCacheCount);
+
+  /// Controller that pans and zooms the page content.
+  final OrientationController controller;
+
+  /// The number of pages displayed in this viewport.
+  final int pageCount;
+
+  /// The size of a single page, if no constraints were applied.
+  final PageSizeResolver? onGetNaturalPageSize;
+
+  /// The number of pages above and below the viewport that should
+  /// be laid out, even though they aren't visible.
+  final int pageLayoutCacheCount;
+
+  /// The number of pages above and below the viewport that should
+  /// be painted, even though they aren't visible.
+  final int pagePaintCacheCount;
+
+  /// [PageBuilder], which lazily builds the widgets for each page in
+  /// this viewport.
+  final PageBuilder builder;
+
+  /// Whether the pages in this viewport should rebuild every time the orientation
+  /// changes.
+  ///
+  /// Orientation changes include panning (horizontal and vertical movement), and
+  /// zooming (scale up/down). Orientation changes happen rapidly. When rebuilding
+  /// on orientation change, the visible and cached pages will rebuild at 60 fps
+  /// during the duration of the orientation change. You should only rebuild during
+  /// orientation change if your page widgets alter their layout or painting based
+  /// on relative position or scale.
+  final bool rebuildOnOrientationChange;
+
+  @override
+  RenderObjectElement createElement() {
+    PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport element");
+    return PageListViewportWithVariableSizeElement(this);
+  }
+
+  @override
+  RenderObject createRenderObject(BuildContext context) {
+    PageListViewportLogs.pagesList.finest(() => "Creating PageListViewport render object");
+    return RenderPageListVariableSizeViewport(
+      element: context as PageListViewportWithVariableSizeElement,
+      controller: controller,
+      pageCount: pageCount,
+      pageSizeResolver: onGetNaturalPageSize,
+      pageLayoutCacheCount: pageLayoutCacheCount,
+      pagePaintCacheCount: pagePaintCacheCount,
+    );
+  }
+
+  @override
+  void updateRenderObject(BuildContext context, RenderPageListVariableSizeViewport renderObject) {
+    PageListViewportLogs.pagesList.finest(() => "Updating PageListViewport render object");
+    renderObject //
+      ..pageCount = pageCount
+      ..pageSizeResolver = onGetNaturalPageSize
+      ..pageLayoutCacheCount = pageLayoutCacheCount
+      ..pagePaintCacheCount = pagePaintCacheCount
+      ..controller = controller;
+  }
+}
+
 class RenderPageListVariableSizeViewport extends RenderBox implements PageListViewportLayout {
   RenderPageListVariableSizeViewport({
     required PageListViewportWithVariableSizeElement element,
@@ -503,7 +578,7 @@ class PageListViewportWithVariableSizeElement extends RenderObjectElement {
     // based on its widget. We add children during layout(), so we can't
     // do that here. However, if the widget has reduced the number of
     // desired pages, we can remove extra pages here.
-    final pageListViewport = widget as PageListViewport;
+    final pageListViewport = widget as PageListViewportWithVariablePageSize;
     if (pageListViewport.pageCount < childCount) {
       for (int i = childCount - 1; i >= pageListViewport.pageCount; i -= 1) {
         forgetChild(_childElements[i]!);
@@ -529,7 +604,7 @@ class PageListViewportWithVariableSizeElement extends RenderObjectElement {
       try {
         newChild = updateChild(
           _childElements[pageIndex],
-          (widget as PageListViewport).builder(this, pageIndex),
+          (widget as PageListViewportWithVariablePageSize).builder(this, pageIndex),
           pageIndex,
         );
       } finally {}
@@ -825,7 +900,7 @@ class PageListViewportWithVariableSizeController extends OrientationController {
         );
       }
 
-      _isFirstLayoutForController = false;    
+      _isFirstLayoutForController = false;
     }
 
     if (_initialPageIndex != null) {
@@ -1235,3 +1310,5 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     return index;
   }
 }
+
+typedef PageSizeResolver = Size Function(int pageIndex);

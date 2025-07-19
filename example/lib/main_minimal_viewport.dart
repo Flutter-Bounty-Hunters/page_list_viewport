@@ -36,7 +36,7 @@ class _MinimalViewportDemoState extends State<_MinimalViewportDemo> with TickerP
     return Scaffold(
       body: PageListViewportGestures(
         controller: _controller,
-        child: PageListViewport(
+        child: PageListViewport.sameSizePages(
           controller: _controller,
           pageCount: 10,
           naturalPageSize: const Size(8.5, 11) * 72,
