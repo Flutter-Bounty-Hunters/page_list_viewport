@@ -20,6 +20,11 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// A widget that displays a [PageListViewportWithVariablePageSize], intercalating
+/// between vertical and horizontal aspect ratios for each page.
+///
+/// Each page has a centered circle, which scales its size based on the incoming constraints,
+/// and the natural size of the page.
 class MyHomePage extends StatefulWidget {
   const MyHomePage({
     super.key,
