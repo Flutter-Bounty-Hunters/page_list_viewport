@@ -168,7 +168,7 @@ class _PageListImagesInspectorDemoState extends State<PageListImagesInspectorDem
         controller: _viewportController,
         child: PageListViewportGestures(
           controller: _viewportController,
-          child: PageListViewport(
+          child: PageListViewport.sameSizePages(
             key: _pageViewportKey,
             controller: _viewportController,
             pageCount: 20,

@@ -246,7 +246,7 @@ Future<void> _pumpPageListViewport(
           controller: controller,
           scrollSettleBehavior: scrollSettlingBehavior,
           lockPanAxis: true,
-          child: PageListViewport(
+          child: PageListViewport.sameSizePages(
             controller: controller,
             pageCount: 100,
             naturalPageSize: const Size(8.5, 11) * 72 * widgetTester.view.devicePixelRatio,
