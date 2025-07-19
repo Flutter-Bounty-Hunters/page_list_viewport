@@ -949,25 +949,6 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     notifyListeners();
   }
 
-  Offset _getPageOffset(int pageIndex, [double? zoomLevel]) {
-    final desiredZoomLevel = zoomLevel ?? scale;
-
-    // Since each page can have its own size, to determine the offset we need to
-    // comput the page size for each page above the desired page index.
-    double contentAboveDesiredPage = 0.0;
-    for (int i = 0; i < pageIndex; i++) {
-      final pageSizeAtZoomLevel = _viewport!.calculatePageSize(i, desiredZoomLevel);
-      contentAboveDesiredPage += pageSizeAtZoomLevel.height;
-    }
-
-    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(pageIndex, desiredZoomLevel);
-    final desiredPageTopLeftInViewport =
-        (_viewportSize!).center(Offset.zero) - Offset(pageSizeAtZoomLevel.width / 2, pageSizeAtZoomLevel.height / 2);
-
-    final desiredOrigin = Offset(0, -contentAboveDesiredPage) + desiredPageTopLeftInViewport;
-    return _constrainOriginToViewportBounds(desiredOrigin);
-  }
-
   /// Immediately changes the viewport offset so that the given [pixelOffsetInPage], within the  page at the given
   /// [pageIndex], is positioned as close as possible to the center of the viewport.
   ///
@@ -1102,26 +1083,6 @@ class PageListViewportWithVariableSizeController extends OrientationController {
 
     _animationController.duration = animationDuration;
     return _animationController.forward(from: 0);
-  }
-
-  void _onOrientationAnimationChange() {
-    _origin = _offsetAnimation!.value;
-    _scale = _scaleAnimation!.value;
-
-    if (_velocityStopwatch.elapsedMilliseconds > 0) {
-      _velocity = (_offsetAnimation!.value - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
-      _velocityStopwatch.reset();
-    }
-    _previousOrigin = _offsetAnimation!.value;
-
-    notifyListeners();
-  }
-
-  void _onOrientationAnimationEnd() {
-    _velocity = Offset.zero;
-    _velocityStopwatch.reset();
-
-    notifyListeners();
   }
 
   @override
@@ -1270,6 +1231,50 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     _previousSimulationOrientation = null;
   }
 
+  Offset _getPageOffset(int pageIndex, [double? zoomLevel]) {
+    final desiredZoomLevel = zoomLevel ?? scale;
+
+    // Since each page can have its own size, to determine the offset we need to
+    // comput the page size for each page above the desired page index.
+    double contentAboveDesiredPage = 0.0;
+    for (int i = 0; i < pageIndex; i++) {
+      final pageSizeAtZoomLevel = _viewport!.calculatePageSize(i, desiredZoomLevel);
+      contentAboveDesiredPage += pageSizeAtZoomLevel.height;
+    }
+
+    final pageSizeAtZoomLevel = _viewport!.calculatePageSize(pageIndex, desiredZoomLevel);
+    final desiredPageTopLeftInViewport =
+        (_viewportSize!).center(Offset.zero) - Offset(pageSizeAtZoomLevel.width / 2, pageSizeAtZoomLevel.height / 2);
+
+    final desiredOrigin = Offset(0, -contentAboveDesiredPage) + desiredPageTopLeftInViewport;
+    return _constrainOriginToViewportBounds(desiredOrigin);
+  }
+
+  int _getPageIndexAtOffset(Offset offset) {
+    // Find the first page that is visible at the given offset.
+    return _findFirstVisiblePageAtY(offset.dy.abs());
+  }
+
+  void _onOrientationAnimationChange() {
+    _origin = _offsetAnimation!.value;
+    _scale = _scaleAnimation!.value;
+
+    if (_velocityStopwatch.elapsedMilliseconds > 0) {
+      _velocity = (_offsetAnimation!.value - _previousOrigin) / (_velocityStopwatch.elapsedMilliseconds / 1000);
+      _velocityStopwatch.reset();
+    }
+    _previousOrigin = _offsetAnimation!.value;
+
+    notifyListeners();
+  }
+
+  void _onOrientationAnimationEnd() {
+    _velocity = Offset.zero;
+    _velocityStopwatch.reset();
+
+    notifyListeners();
+  }
+
   Offset _constrainOriginToViewportBounds(Offset desiredOrigin) {
     // If content is thinner than a viewport dimension, that content should be centered.
     //
@@ -1279,7 +1284,8 @@ class PageListViewportWithVariableSizeController extends OrientationController {
     double originX = desiredOrigin.dx;
     double originY = desiredOrigin.dy;
 
-    final contentWidth = _viewport!.calculatePageSize(0, scale).width;
+    final pageIndex = _getPageIndexAtOffset(desiredOrigin);
+    final contentWidth = _viewport!.calculatePageSize(pageIndex, scale).width;
     final contentHeight = _viewport!.calculateContentHeight(scale);
     final viewportSize = _viewport!.getSize();
 
