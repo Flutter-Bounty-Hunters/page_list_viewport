@@ -170,7 +170,8 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 
   void _onScaleUpdate(ScaleUpdateDetails details) {
     PageListViewportLogs.pagesListGestures.finer(
-        () => "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}");
+      () => "onScaleUpdate() - new focal point ${details.focalPoint}, focal delta: ${details.focalPointDelta}",
+    );
     if (!_isPanning) {
       // The user is interacting with a stylus. We don't want to pan
       // or scale with a stylus.
@@ -178,8 +179,9 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
     }
 
     if (!_isPanningEnabled) {
-      PageListViewportLogs.pagesListGestures
-          .finer(() => "Started panning when the stylus was down. Resetting transform to:");
+      PageListViewportLogs.pagesListGestures.finer(
+        () => "Started panning when the stylus was down. Resetting transform to:",
+      );
       PageListViewportLogs.pagesListGestures.finer(() => " - origin: ${widget.controller.origin}");
       PageListViewportLogs.pagesListGestures.finer(() => " - scale: ${widget.controller.scale}");
       _isPanning = false;
@@ -205,14 +207,16 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
 
     _panAndScaleFocalPoint = _panAndScaleFocalPoint! + focalPointTranslation;
 
-    widget.controller //
+    widget
+        .controller //
       ..setScale(details.scale * _startContentScale!, _panAndScaleFocalPoint!)
       ..translate(focalPointTranslation);
 
     _panAndScaleVelocityTracker.onScaleUpdate(_panAndScaleFocalPoint!, details.pointerCount);
 
-    PageListViewportLogs.pagesListGestures
-        .finer(() => "New origin: ${widget.controller.origin}, scale: ${widget.controller.scale}");
+    PageListViewportLogs.pagesListGestures.finer(
+      () => "New origin: ${widget.controller.origin}, scale: ${widget.controller.scale}",
+    );
   }
 
   void _lockPanningAxisIfDesired(Offset translation, int pointerCount) {
@@ -298,20 +302,22 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
   void _startMomentum() {
     PageListViewportLogs.pagesListGestures.fine(() => "Starting momentum...");
     final dragMultiplier = _panAndScaleVelocityTracker.dragIncreaseMultiplier;
-    PageListViewportLogs.pagesListGestures
-        .fine(() => "Starting momentum with velocity: ${_panAndScaleVelocityTracker.velocity}");
+    PageListViewportLogs.pagesListGestures.fine(
+      () => "Starting momentum with velocity: ${_panAndScaleVelocityTracker.velocity}",
+    );
 
     final panningSimulation = BallisticPanningOrientationSimulation(
-      initialOrientation: AxisAlignedOrientation(
-        widget.controller.origin,
-        widget.controller.scale,
-      ),
+      initialOrientation: AxisAlignedOrientation(widget.controller.origin, widget.controller.scale),
       panningSimulation: PanningFrictionSimulation(
         position: widget.controller.origin,
         velocity: _panAndScaleVelocityTracker.velocity,
-        lockedAxisSimulationInitialVelocityMultiplier:
-            _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier,
+        lockedAxisSimulationInitialVelocityMultiplier: widget.ballistics.lockedAxisSimulationInitialVelocityMultiplier,
+        panningAxisSimulationInitialVelocityMultiplier:
+            widget.ballistics.panningAxisSimulationInitialVelocityMultiplier,
         dragMultiplier: dragMultiplier,
+        horizontalDragCoefficient: widget.ballistics.horizontalDragCoefficient,
+        verticalDragCoefficient: widget.ballistics.verticalDragCoefficient,
+        staticFrictionCoefficient: widget.ballistics.staticFrictionCoefficient,
       ),
     );
     widget.controller.driveWithSimulation(panningSimulation);
@@ -419,18 +425,16 @@ class HalfPixelScrollSettlingBehavior implements ScrollSettlingBehavior {
   const HalfPixelScrollSettlingBehavior();
 
   @override
-  Offset correctFinalOffset(Offset finalOffset) => Offset(
-        (finalOffset.dx * 2).roundToDouble() / 2,
-        (finalOffset.dy * 2).roundToDouble() / 2,
-      );
+  Offset correctFinalOffset(Offset finalOffset) =>
+      Offset((finalOffset.dx * 2).roundToDouble() / 2, (finalOffset.dy * 2).roundToDouble() / 2);
 }
 
 class DeprecatedPanAndScaleVelocityTracker {
   DeprecatedPanAndScaleVelocityTracker({
     required Clock clock,
     PageListViewportBallistics ballistics = PageListViewportBallistics.standard,
-  })  : _clock = clock,
-        _ballistics = ballistics;
+  }) : _clock = clock,
+       _ballistics = ballistics;
 
   final _focalPointHistory = ListQueue<Offset>();
 
@@ -499,8 +503,10 @@ class DeprecatedPanAndScaleVelocityTracker {
   Offset _lastFocalPosition = Offset.zero;
 
   void onScaleStart(ScaleStartDetails details) {
-    PageListViewportLogs.pagesListGestures.fine(() =>
-        "onScaleStart() - pointer count: ${details.pointerCount}, time since last gesture: ${_timeSinceLastGesture?.inMilliseconds}ms");
+    PageListViewportLogs.pagesListGestures.fine(
+      () =>
+          "onScaleStart() - pointer count: ${details.pointerCount}, time since last gesture: ${_timeSinceLastGesture?.inMilliseconds}ms",
+    );
 
     if (_previousGesturePointerCount == 0) {
       _currentGestureStartAction = PanAndScaleGestureAction.firstFingerDown;
@@ -529,8 +535,10 @@ class DeprecatedPanAndScaleVelocityTracker {
     _currentGestureStartTimeInMillis = _clock.millis;
 
     if (_timeSinceLastGesture != null && _timeSinceLastGesture! < const Duration(milliseconds: 30)) {
-      PageListViewportLogs.pagesListGestures.fine(() =>
-          " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousGesturePointerCount. Current pointer count: ${details.pointerCount}");
+      PageListViewportLogs.pagesListGestures.fine(
+        () =>
+            " - this gesture started really fast. Assuming that this is a continuation. Previous pointer count: $_previousGesturePointerCount. Current pointer count: ${details.pointerCount}",
+      );
       _isPossibleGestureContinuation = true;
     } else if (_timeSinceLastGesture != null &&
         _timeSinceLastGesture! < _ballistics.maxDurationForRepeatGesturesToAcceleratePanning) {
@@ -582,8 +590,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       // Enough time has passed for us to conclude that this gesture isn't just
       // an intermediate moment as the user adds or removes fingers. This gesture
       // is intentional, and we need to track its velocity.
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.");
+      PageListViewportLogs.pagesListGestures.fine(
+        () => " - a possible gesture continuation has been confirmed as a new gesture. Restarting velocity.",
+      );
       _currentGestureStartTimeInMillis = _clock.millis;
       _launchVelocity = Offset.zero;
 
@@ -605,8 +614,9 @@ class DeprecatedPanAndScaleVelocityTracker {
 
   void onScaleEnd(Offset velocity, int pointerCount) {
     final gestureDuration = Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
-    PageListViewportLogs.pagesListGestures
-        .fine(() => "onScaleEnd() - gesture duration: ${gestureDuration.inMilliseconds}");
+    PageListViewportLogs.pagesListGestures.fine(
+      () => "onScaleEnd() - gesture duration: ${gestureDuration.inMilliseconds}",
+    );
 
     _previousGestureEndTimeInMillis = _clock.millis;
     _previousGesturePointerCount = pointerCount;
@@ -616,12 +626,16 @@ class DeprecatedPanAndScaleVelocityTracker {
     if (_isPossibleGestureContinuation) {
       PageListViewportLogs.pagesListGestures.fine(() => " - this gesture is a continuation of a previous gesture.");
       if (pointerCount > 0) {
-        PageListViewportLogs.pagesListGestures.fine(() =>
-            " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.");
+        PageListViewportLogs.pagesListGestures.fine(
+          () =>
+              " - this continuation gesture still has fingers touching the screen. The end of this gesture means nothing for the velocity.",
+        );
         return;
       } else {
-        PageListViewportLogs.pagesListGestures.fine(() =>
-            " - the user just removed the final finger. Using launch velocity from previous gesture: $_launchVelocity");
+        PageListViewportLogs.pagesListGestures.fine(
+          () =>
+              " - the user just removed the final finger. Using launch velocity from previous gesture: $_launchVelocity",
+        );
         return;
       }
     }
@@ -631,8 +645,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       // simulation, so we set the launch velocity to zero.
       // If the panning continues long enough, then we'll use the panning
       // velocity for ballistic.
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.");
+      PageListViewportLogs.pagesListGestures.fine(
+        () => " - this gesture was a scale gesture and user switched to panning. Resetting launch velocity.",
+      );
       _launchVelocity = Offset.zero;
       return;
     }
@@ -715,10 +730,12 @@ class DeprecatedPanAndScaleVelocityTracker {
     }
 
     if (pointerCount > 0) {
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - the user removed a finger, but is still interacting. Storing velocity for later.");
-      PageListViewportLogs.pagesListGestures
-          .fine(() => " - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}");
+      PageListViewportLogs.pagesListGestures.fine(
+        () => " - the user removed a finger, but is still interacting. Storing velocity for later.",
+      );
+      PageListViewportLogs.pagesListGestures.fine(
+        () => " - stored velocity: $_launchVelocity, magnitude: ${_launchVelocity.distance}",
+      );
       return;
     }
 
@@ -729,10 +746,12 @@ class DeprecatedPanAndScaleVelocityTracker {
       _numberOfRepeatedAcceleratedSwipes += 1;
       // Don't alter the launch velocity for the ballistic simulation of the first 3 swipes.
       if (_numberOfRepeatedAcceleratedSwipes > 2) {
-        _ballisticSimulationInitialVelocityMultiplier =
-            _calculateVelocityMultiplierFromRepeatedSwipeCount(_numberOfRepeatedAcceleratedSwipes);
-        _ballisticSimulationDragMultiplier =
-            _calculateDragMultiplierFromRepeatedSwipeCount(_numberOfRepeatedAcceleratedSwipes);
+        _ballisticSimulationInitialVelocityMultiplier = _calculateVelocityMultiplierFromRepeatedSwipeCount(
+          _numberOfRepeatedAcceleratedSwipes,
+        );
+        _ballisticSimulationDragMultiplier = _calculateDragMultiplierFromRepeatedSwipeCount(
+          _numberOfRepeatedAcceleratedSwipes,
+        );
       }
     } else {
       // The user is not panning in the same direction as the last frame. Reset direction tracking.
@@ -747,8 +766,9 @@ class DeprecatedPanAndScaleVelocityTracker {
       _previousLaunchedWithBallistic = true;
     }
 
-    PageListViewportLogs.pagesListGestures
-        .fine(() => " - the user has completely stopped interacting. Launch velocity is: $_launchVelocity");
+    PageListViewportLogs.pagesListGestures.fine(
+      () => " - the user has completely stopped interacting. Launch velocity is: $_launchVelocity",
+    );
   }
 
   /// Compute ballistic simulation launch velocity multiplier for repeated swiping gestures.
@@ -759,12 +779,7 @@ class DeprecatedPanAndScaleVelocityTracker {
   /// Velocity multiplier due to repeated input assumes this model:
   /// startValue+\frac{endValue-startValue}{1+e^{-k(x-transitionValue)}}
   double _calculateVelocityMultiplierFromRepeatedSwipeCount(int numberOfRepeatedAcceleratedSwipes) {
-    const double transitionValue = 9; // where the function takes it's intermediate value
-    const double k = 0.5; // how quickly the shift happens (smaller is slower)
-    const double startValue = 1;
-    const double endValue = 14;
-    return startValue +
-        (endValue - startValue) / (1 + math.exp(-k * (numberOfRepeatedAcceleratedSwipes - transitionValue)));
+    return _ballistics.velocityMultiplierSigmoid.apply(numberOfRepeatedAcceleratedSwipes.toDouble());
   }
 
   /// Compute ballistic simulation drag multiplier for repeated swiping gestures.
@@ -774,19 +789,45 @@ class DeprecatedPanAndScaleVelocityTracker {
   /// next gesture.
   /// It assumes this model: startValue+\frac{endValue-startValue}{1+e^{-k(x-transitionValue)}}
   double _calculateDragMultiplierFromRepeatedSwipeCount(int numberOfRepeatedAcceleratedSwipes) {
-    const double transitionValue = 5; // where the function takes its intermediate value
-    const double k = 0.8; // how quickly the shift happens (smaller is slower)
-    const double startValue = 1;
-    const double endValue = 0.5;
-    return startValue +
-        (endValue - startValue) / (1 + math.exp(-k * (numberOfRepeatedAcceleratedSwipes - transitionValue)));
+    return _ballistics.dragMultiplierSigmoid.apply(numberOfRepeatedAcceleratedSwipes.toDouble());
   }
 
   Duration get _timeSinceStartOfGesture => Duration(milliseconds: _clock.millis - _currentGestureStartTimeInMillis!);
 
-  Duration? get _timeSinceLastGesture => _previousGestureEndTimeInMillis != null
-      ? Duration(milliseconds: _clock.millis - _previousGestureEndTimeInMillis!)
-      : null;
+  Duration? get _timeSinceLastGesture =>
+      _previousGestureEndTimeInMillis != null
+          ? Duration(milliseconds: _clock.millis - _previousGestureEndTimeInMillis!)
+          : null;
+}
+
+/// Configuration for sigmoid function parameters.
+///
+/// Used to configure smooth transitions between values using the sigmoid function:
+/// startValue + (endValue - startValue) / (1 + e^(-k * (x - transitionValue)))
+class SigmoidConfig {
+  const SigmoidConfig({
+    required this.transitionValue,
+    required this.k,
+    required this.startValue,
+    required this.endValue,
+  });
+
+  /// Where the sigmoid function takes its intermediate value.
+  final double transitionValue;
+
+  /// How quickly the shift happens (smaller values result in slower transitions).
+  final double k;
+
+  /// The starting value of the sigmoid function.
+  final double startValue;
+
+  /// The ending value of the sigmoid function.
+  final double endValue;
+
+  /// Applies the sigmoid function with this configuration.
+  double apply(double x) {
+    return startValue + (endValue - startValue) / (1 + math.exp(-k * (x - transitionValue)));
+  }
 }
 
 class PageListViewportBallistics {
@@ -804,6 +845,13 @@ class PageListViewportBallistics {
     largeTranslationNormalSpeedMultiplier: 0.85,
     largeTranslationFastSpeedMultiplier: 1.0,
     maxDurationForRepeatGesturesToAcceleratePanning: Duration(milliseconds: 1000),
+    horizontalDragCoefficient: 250.0,
+    verticalDragCoefficient: 300.0,
+    staticFrictionCoefficient: 20.0,
+    lockedAxisSimulationInitialVelocityMultiplier: 1.0,
+    panningAxisSimulationInitialVelocityMultiplier: 0.7,
+    velocityMultiplierSigmoid: SigmoidConfig(transitionValue: 9.0, k: 0.5, startValue: 1.0, endValue: 14.0),
+    dragMultiplierSigmoid: SigmoidConfig(transitionValue: 5.0, k: 0.8, startValue: 1.0, endValue: 0.5),
   );
 
   const PageListViewportBallistics({
@@ -820,6 +868,13 @@ class PageListViewportBallistics {
     required this.largeTranslationNormalSpeedMultiplier,
     required this.largeTranslationFastSpeedMultiplier,
     required this.maxDurationForRepeatGesturesToAcceleratePanning,
+    required this.horizontalDragCoefficient,
+    required this.verticalDragCoefficient,
+    required this.staticFrictionCoefficient,
+    required this.lockedAxisSimulationInitialVelocityMultiplier,
+    required this.panningAxisSimulationInitialVelocityMultiplier,
+    required this.velocityMultiplierSigmoid,
+    required this.dragMultiplierSigmoid,
   });
 
   /// Increase the drag coefficient of the ballistic simulation.
@@ -918,17 +973,48 @@ class PageListViewportBallistics {
   ///
   /// This is called repeated swipe (or scroll) acceleration
   final Duration maxDurationForRepeatGesturesToAcceleratePanning;
+
+  /// Horizontal drag coefficient for ballistic simulation.
+  ///
+  /// Larger values result in faster deceleration for horizontal motion.
+  final double horizontalDragCoefficient;
+
+  /// Vertical drag coefficient for ballistic simulation.
+  ///
+  /// Larger values result in faster deceleration for vertical motion.
+  final double verticalDragCoefficient;
+
+  /// Static friction coefficient for ballistic simulation.
+  ///
+  /// Controls the baseline friction that affects motion regardless of velocity.
+  final double staticFrictionCoefficient;
+
+  /// Initial velocity multiplier for axis-locked gestures.
+  ///
+  /// Applied when the user's gesture is locked to either horizontal or vertical axis.
+  final double lockedAxisSimulationInitialVelocityMultiplier;
+
+  /// Initial velocity multiplier for arbitrary direction panning.
+  ///
+  /// Applied when the user's gesture is not locked to a specific axis.
+  final double panningAxisSimulationInitialVelocityMultiplier;
+
+  /// Sigmoid configuration for velocity multiplier calculation.
+  ///
+  /// Used to calculate velocity multipliers for repeated swipe acceleration.
+  /// The sigmoid function provides smooth transitions between minimum and maximum
+  /// velocity multiplier values based on the number of repeated swipes.
+  final SigmoidConfig velocityMultiplierSigmoid;
+
+  /// Sigmoid configuration for drag multiplier calculation.
+  ///
+  /// Used to calculate drag multipliers for repeated swipe acceleration.
+  /// The sigmoid function provides smooth transitions between initial and final
+  /// drag multiplier values based on the number of repeated swipes.
+  final SigmoidConfig dragMultiplierSigmoid;
 }
 
 class PanningFrictionSimulation implements PanningSimulation {
-  // Dampening factors applied to each component of a [FrictionSimulation].
-  // Larger values result in the [FrictionSimulation] to accelerate faster and approach
-  // zero slower, giving the impression of the simulation being "more slippery".
-  // It was found through testing that other scroll systems seem to be use different dampening
-  // factors for the vertical and horizontal components.
-  static const horizontalDragCoefficient = 250.0;
-  static const verticalDragCoefficient = 300.0;
-  static const staticFrictionCoefficient = 20.0;
   // Mass is used here as a redundant parameter, the ratio of m/c, mass to drag is important.
   // It is recommended to change the drag coefficient instead of the mass.
   // Changing the mass would have the inversely proportional effect as
@@ -938,38 +1024,42 @@ class PanningFrictionSimulation implements PanningSimulation {
   PanningFrictionSimulation({
     required Offset position,
     required Offset velocity,
-    double lockedAxisSimulationInitialVelocityMultiplier = 1.0,
-    double panningAxisSimulationInitialVelocityMultiplier = 0.7,
-    double dragMultiplier = 1.0,
-  })  : _position = position,
-        _velocity = velocity,
-        _dragMultiplier = dragMultiplier {
+    this.lockedAxisSimulationInitialVelocityMultiplier = 1.0,
+    this.panningAxisSimulationInitialVelocityMultiplier = 0.7,
+    this.dragMultiplier = 1.0,
+    this.horizontalDragCoefficient = 250.0,
+    this.verticalDragCoefficient = 300.0,
+    this.staticFrictionCoefficient = 20.0,
+  }) : _position = position,
+       _velocity = velocity {
     if (_velocity.dx.abs() > 0 && _velocity.dy.abs() > 0) {
       // The simulation is not locked to an axis, it is in an arbitrary direction.
 
       _xSimulation = FrictionAndFirstOrderDragBallisticSimulation(
-          staticFrictionCoefficient,
-          horizontalDragCoefficient * _dragMultiplier,
-          mass,
-          _position.dx,
-          _velocity.distance,
-          math.cos(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
+        staticFrictionCoefficient,
+        horizontalDragCoefficient * dragMultiplier,
+        mass,
+        _position.dx,
+        _velocity.distance,
+        math.cos(math.atan2(_velocity.dy, _velocity.dx)),
+        initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier,
+      );
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
-          staticFrictionCoefficient,
-          horizontalDragCoefficient * _dragMultiplier,
-          mass,
-          _position.dy,
-          _velocity.distance,
-          math.sin(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
+        staticFrictionCoefficient,
+        horizontalDragCoefficient * dragMultiplier,
+        mass,
+        _position.dy,
+        _velocity.distance,
+        math.sin(math.atan2(_velocity.dy, _velocity.dx)),
+        initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier,
+      );
     } else {
       // The simulation is locked to one of the axes.
 
       _xSimulation = FrictionAndFirstOrderDragBallisticSimulation(
         staticFrictionCoefficient,
-        verticalDragCoefficient * _dragMultiplier,
+        verticalDragCoefficient * dragMultiplier,
         mass,
         _position.dx,
         _velocity.dx,
@@ -979,7 +1069,7 @@ class PanningFrictionSimulation implements PanningSimulation {
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
         staticFrictionCoefficient,
-        horizontalDragCoefficient * _dragMultiplier,
+        horizontalDragCoefficient * dragMultiplier,
         mass,
         _position.dy,
         _velocity.dy,
@@ -991,7 +1081,12 @@ class PanningFrictionSimulation implements PanningSimulation {
 
   final Offset _position;
   final Offset _velocity;
-  final double _dragMultiplier;
+  final double dragMultiplier;
+  final double horizontalDragCoefficient;
+  final double verticalDragCoefficient;
+  final double staticFrictionCoefficient;
+  final double lockedAxisSimulationInitialVelocityMultiplier;
+  final double panningAxisSimulationInitialVelocityMultiplier;
   late final Simulation _xSimulation;
   late final Simulation _ySimulation;
 
@@ -1002,17 +1097,11 @@ class PanningFrictionSimulation implements PanningSimulation {
   }
 
   Offset x(double time) {
-    return Offset(
-      _xSimulation.x(time),
-      _ySimulation.x(time),
-    );
+    return Offset(_xSimulation.x(time), _ySimulation.x(time));
   }
 
   Offset dx(double time) {
-    return Offset(
-      _xSimulation.dx(time),
-      _ySimulation.dx(time),
-    );
+    return Offset(_xSimulation.dx(time), _ySimulation.dx(time));
   }
 
   bool isDone(double time) => _xSimulation.isDone(time) && _ySimulation.isDone(time);
@@ -1061,13 +1150,13 @@ class FrictionAndFirstOrderDragBallisticSimulation extends Simulation {
     super.tolerance,
     double initialVelocityMultiplier = 1,
     double maxInitialScrollingVelocity = 100000,
-  })  : _c = drag,
-        _n = friction,
-        _m = mass,
-        _x = position,
-        _w = velocity.abs() * initialVelocityMultiplier,
-        _sign = velocity.sign,
-        _positionMultiplier = positionMultiplier {
+  }) : _c = drag,
+       _n = friction,
+       _m = mass,
+       _x = position,
+       _w = velocity.abs() * initialVelocityMultiplier,
+       _sign = velocity.sign,
+       _positionMultiplier = positionMultiplier {
     _finalTime = _m * math.log(1 + _w * _c / (_m * _n)) / _c;
     if (_w > maxInitialScrollingVelocity) {
       _w = maxInitialScrollingVelocity;
