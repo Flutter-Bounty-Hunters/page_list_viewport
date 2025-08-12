@@ -312,6 +312,7 @@ class _PageListViewportGesturesState extends State<PageListViewportGestures> wit
         lockedAxisSimulationInitialVelocityMultiplier: widget.ballistics.lockedAxisSimulationInitialVelocityMultiplier,
         panningAxisSimulationInitialVelocityMultiplier:
             widget.ballistics.panningAxisSimulationInitialVelocityMultiplier,
+        velocityMultiplier: _panAndScaleVelocityTracker.ballisticSimulationInitialVelocityMultiplier,
         dragMultiplier: dragMultiplier,
         horizontalDragCoefficient: widget.ballistics.horizontalDragCoefficient,
         verticalDragCoefficient: widget.ballistics.verticalDragCoefficient,
@@ -1002,6 +1003,7 @@ class PanningFrictionSimulation implements PanningSimulation {
     required Offset velocity,
     double lockedAxisSimulationInitialVelocityMultiplier = 1.0,
     double panningAxisSimulationInitialVelocityMultiplier = 0.7,
+    double velocityMultiplier = 1.0,
     double dragMultiplier = 1.0,
     double horizontalDragCoefficient = 250.0,
     double verticalDragCoefficient = 300.0,
@@ -1009,7 +1011,8 @@ class PanningFrictionSimulation implements PanningSimulation {
     double mass = 100.0,
   })  : _position = position,
         _velocity = velocity,
-        _dragMultiplier = dragMultiplier {
+        _dragMultiplier = dragMultiplier,
+        _velocityMultiplier = velocityMultiplier {
     if (_velocity.dx.abs() > 0 && _velocity.dy.abs() > 0) {
       // The simulation is not locked to an axis, it is in an arbitrary direction.
 
@@ -1020,37 +1023,37 @@ class PanningFrictionSimulation implements PanningSimulation {
           _position.dx,
           _velocity.distance,
           math.cos(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
+          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier * _velocityMultiplier);
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
           staticFrictionCoefficient,
-          horizontalDragCoefficient * _dragMultiplier,
+          verticalDragCoefficient * _dragMultiplier,
           mass,
           _position.dy,
           _velocity.distance,
           math.sin(math.atan2(_velocity.dy, _velocity.dx)),
-          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier);
+          initialVelocityMultiplier: panningAxisSimulationInitialVelocityMultiplier * _velocityMultiplier);
     } else {
       // The simulation is locked to one of the axes.
 
       _xSimulation = FrictionAndFirstOrderDragBallisticSimulation(
         staticFrictionCoefficient,
-        verticalDragCoefficient * _dragMultiplier,
+        horizontalDragCoefficient * _dragMultiplier,
         mass,
         _position.dx,
         _velocity.dx,
         1,
-        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier,
+        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier * _velocityMultiplier,
       );
 
       _ySimulation = FrictionAndFirstOrderDragBallisticSimulation(
         staticFrictionCoefficient,
-        horizontalDragCoefficient * _dragMultiplier,
+        verticalDragCoefficient * _dragMultiplier,
         mass,
         _position.dy,
         _velocity.dy,
         1,
-        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier,
+        initialVelocityMultiplier: lockedAxisSimulationInitialVelocityMultiplier * _velocityMultiplier,
       );
     }
   }
@@ -1058,6 +1061,7 @@ class PanningFrictionSimulation implements PanningSimulation {
   final Offset _position;
   final Offset _velocity;
   final double _dragMultiplier;
+  final double _velocityMultiplier;
   late final Simulation _xSimulation;
   late final Simulation _ySimulation;
 
